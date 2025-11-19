@@ -1,0 +1,26 @@
+{
+  "star": {
+    "radius": 3,
+    "fill": "#00FFFF",
+    "stroke": "#00FFFF",
+    "strokeWidth": 0,
+    "shadowEnabled": true,
+    "shadowColor": "#00FFFF",
+    "shadowBlur": 25,
+    "shadowOffsetX": 0,
+    "shadowOffsetY": 0,
+    "opacity": 1
+  },
+  "line": {
+    "stroke": "#00FFFF",
+    "strokeWidth": 1,
+    "dash": [],
+    "shadowEnabled": true,
+    "shadowColor": "#00FFFF",
+    "shadowBlur": 20,
+    "shadowOffsetX": 0,
+    "shadowOffsetY": 0,
+    "opacity": 0.95
+  }
+}
+
