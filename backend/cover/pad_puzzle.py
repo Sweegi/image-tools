@@ -51,10 +51,10 @@ def prepare_pad_images(work_dir: Path) -> bool:
     Returns:
         是否成功
     """
-    pad = work_dir / 'pad.png'
-    if not pad.exists():
-        logger.error(f"  缺少 pad.png")
-        return False
+    pad = get_image_file(work_dir, 'pad')
+    if not pad:
+        logger.info(f"  未找到 pad.png，跳过 Pad 图片预处理")
+        return True
     
     success = True
     
@@ -155,6 +155,13 @@ def create_pad_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str
     Returns:
         是否成功
     """
+    pad_file = get_image_file(work_dir, 'pad')
+
+    # 如果不存在 pad.png，跳过 Pad 壁纸拼接
+    if not pad_file:
+        logger.info(f"  未找到 pad.png，跳过 Pad 壁纸拼接")
+        return True
+
     pad_lock_file = get_image_file(work_dir, 'pad-lock')
     pad_desktop_file = work_dir / 'pad-desktop.png'
     
