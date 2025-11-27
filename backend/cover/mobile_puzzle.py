@@ -99,7 +99,7 @@ def prepare_mobile_desktop(work_dir: Path) -> bool:
 def create_mobile_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str] = None) -> bool:
     """
     创建 Mobile 拼图
-    两张图片居中水平排列，单个图片占总页面宽度的30%
+    两张图片居中水平排列，单个图片占总页面高度的70%
 
     Args:
         work_dir: 工作目录
@@ -125,17 +125,17 @@ def create_mobile_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[
         mobile_lock = resize_to_fit_ratio(mobile_lock, target_input_ratio, (2000, 4000))
         mobile_desktop = resize_to_fit_ratio(mobile_desktop, target_input_ratio, (2000, 4000))
 
-        # 先确定画布尺寸（3:4 比例）
+        # 先确定画布尺寸（1:1 比例）
         # 使用一个基准高度来计算画布尺寸
         base_height = 2000
         canvas_width = int(base_height * (OUTPUT_RATIO[0] / OUTPUT_RATIO[1]))
         canvas_height = base_height
 
-        # 计算目标图片内容宽度：每张图片占画布宽度的30%
-        # 注意：这是图片内容部分的宽度，不包括阴影
-        target_content_width = int(canvas_width * 0.3)
-        # 根据 9:19 比例计算目标高度
-        target_content_height = int(target_content_width / target_input_ratio)
+        # 计算目标图片内容高度：每张图片占画布高度的70%
+        # 注意：这是图片内容部分的高度，不包括阴影
+        target_content_height = int(canvas_height * 0.7)
+        # 根据 9:19 比例计算目标宽度
+        target_content_width = int(target_content_height * target_input_ratio)
 
         # 调整两张图片到目标尺寸
         mobile_lock = mobile_lock.resize((target_content_width, target_content_height), Image.Resampling.LANCZOS)
@@ -148,7 +148,7 @@ def create_mobile_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[
         # 计算两张图片（带阴影）的总宽度和间距
         total_content_width = mobile_lock.width + mobile_desktop.width + SPACING
 
-        # 如果总宽度超过画布，需要按比例缩小，但保持图片内容占30%的比例
+        # 如果总宽度超过画布，需要按比例缩小，但保持图片内容高度占70%的比例
         # 计算缩放比例，确保两张图片内容宽度之和 + 间距不超过画布
         max_total_width = canvas_width
         if total_content_width > max_total_width:
@@ -157,9 +157,9 @@ def create_mobile_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[
             # 所以：scale <= (max_total_width - SPACING) / (2 * target_content_width)
             max_scale = (max_total_width - SPACING) / (2 * target_content_width)
             if max_scale < 1.0:
-                # 需要缩小
+                # 需要缩小（保持高度占70%的比例）
                 new_target_content_width = int(target_content_width * max_scale)
-                new_target_content_height = int(new_target_content_width / target_input_ratio)
+                new_target_content_height = int(target_content_height * max_scale)
 
                 # 重新调整图片尺寸
                 mobile_lock = Image.open(mobile_lock_file)

@@ -34,7 +34,35 @@ logger = logging.getLogger(__name__)
 # 常量定义
 IMGS_DIR = Path(__file__).parent / 'imgs'
 
+# 临时文件列表（在拼图完成后需要清理）
+TEMP_FILES = [
+    'mobile-desktop.png',
+    'pad-desktop.png',
+    'pad-lock.png',
+    'pc-desktop-mac.png'
+]
 
+
+def cleanup_temp_files(work_dir: Path) -> None:
+    """
+    清理临时文件
+    
+    Args:
+        work_dir: 工作目录
+    """
+    cleaned_count = 0
+    for temp_file in TEMP_FILES:
+        temp_path = work_dir / temp_file
+        if temp_path.exists():
+            try:
+                temp_path.unlink()
+                cleaned_count += 1
+                logger.debug(f"  已删除临时文件: {temp_file}")
+            except Exception as e:
+                logger.warning(f"  删除临时文件失败 {temp_file}: {e}")
+    
+    if cleaned_count > 0:
+        logger.info(f"  已清理 {cleaned_count} 个临时文件")
 
 
 def check_files_completeness(work_dir: Path) -> Tuple[bool, List[str]]:
@@ -112,6 +140,10 @@ def process_directory(work_dir: Path, main_color: Optional[str] = None) -> bool:
     success &= create_mobile_puzzle(work_dir, intr_dir, main_color)
     success &= create_pc_puzzle(work_dir, intr_dir, main_color)
     success &= create_pad_puzzle(work_dir, intr_dir, main_color)
+    
+    # 清理临时文件
+    logger.info(f"  清理临时文件...")
+    cleanup_temp_files(work_dir)
     
     if success:
         logger.info(f"  目录处理完成: {work_dir}")

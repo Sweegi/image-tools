@@ -22,12 +22,12 @@ PAD_LOCK_COVER = Path(__file__).parent / 'pad-lock-cover.png'
 PC_MAC_COVER = Path(__file__).parent / 'pc-mac-cover.png'
 
 # 输出图片配置
-OUTPUT_RATIO = (3, 4)  # 3:4 比例
+OUTPUT_RATIO = (1, 1)  # 1:1 比例
 MAX_FILE_SIZE = 2 * 1024 * 1024  # 2MB
-BORDER_RADIUS = 20
+BORDER_RADIUS = 25  # 圆角半径（从20增加到25）
 SHADOW_OFFSET = (5, 5)
 SHADOW_BLUR = 10
-SPACING = 30  # 图片之间的间隔
+SPACING = 60  # 图片之间的间隔（从30增加到60，增大一倍）
 
 
 def extract_main_color(image: Image.Image, k: int = 3) -> Tuple[int, int, int]:
@@ -320,17 +320,19 @@ def save_optimized_image(image: Image.Image, output_file: Path, quality: int = 9
         else:
             image = image.convert('RGB')
 
+        # 删除 PNG 文件
+        output_file.unlink()
+
+        # 生成 JPG 文件路径
+        output_file_jpg = output_file.with_suffix('.jpg')
+
         # 逐步降低质量直到文件大小符合要求
         current_quality = quality
-        while file_size > MAX_FILE_SIZE and current_quality > 50:
-            output_file_jpg = output_file.with_suffix('.jpg')
+        while current_quality > 50:
             image.save(output_file_jpg, 'JPEG', quality=current_quality, optimize=True)
             file_size = output_file_jpg.stat().st_size
 
             if file_size <= MAX_FILE_SIZE:
-                # 删除 PNG 文件，保留 JPEG
-                output_file.unlink()
-                output_file_jpg.rename(output_file.with_suffix('.png'))
                 logger.info(f"  已优化为 JPEG，质量: {current_quality}，大小: {file_size / 1024 / 1024:.2f}MB")
                 return
 
@@ -341,8 +343,6 @@ def save_optimized_image(image: Image.Image, output_file: Path, quality: int = 9
             scale = (MAX_FILE_SIZE / file_size) ** 0.5
             new_size = (int(image.width * scale), int(image.height * scale))
             image = image.resize(new_size, Image.Resampling.LANCZOS)
-            output_file_jpg = output_file.with_suffix('.jpg')
             image.save(output_file_jpg, 'JPEG', quality=75, optimize=True)
-            output_file.unlink()
-            output_file_jpg.rename(output_file.with_suffix('.png'))
-            logger.info(f"  已缩小尺寸并保存，大小: {output_file.stat().st_size / 1024 / 1024:.2f}MB")
+            file_size = output_file_jpg.stat().st_size
+            logger.info(f"  已缩小尺寸并保存为 JPEG，大小: {file_size / 1024 / 1024:.2f}MB")

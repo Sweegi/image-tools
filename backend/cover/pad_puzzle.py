@@ -167,7 +167,7 @@ def create_pad_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str
         return False
     
     try:
-        # 先确定画布尺寸（3:4 比例）
+        # 先确定画布尺寸（1:1 比例）
         # 使用一个基准高度来计算画布尺寸
         base_height = 2000
         canvas_width = int(base_height * (OUTPUT_RATIO[0] / OUTPUT_RATIO[1]))
