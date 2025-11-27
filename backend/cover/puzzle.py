@@ -13,12 +13,12 @@ from typing import Optional, Tuple, List
 
 # 尝试相对导入，如果失败则使用绝对导入
 try:
-    from .mobile_puzzle import prepare_mobile_desktop, create_mobile_puzzle
+    from .mobile_puzzle import prepare_mobile_desktop, create_mobile_puzzle, prepare_mobile_desktop_2, create_mobile_puzzle_2, prepare_mobile_desktop_3, create_mobile_puzzle_3
     from .pad_puzzle import prepare_pad_images, create_pad_puzzle
     from .pc_puzzle import prepare_pc_desktop_mac, create_pc_puzzle
     from .utils import get_image_file
 except ImportError:
-    from mobile_puzzle import prepare_mobile_desktop, create_mobile_puzzle
+    from mobile_puzzle import prepare_mobile_desktop, create_mobile_puzzle, prepare_mobile_desktop_2, create_mobile_puzzle_2, prepare_mobile_desktop_3, create_mobile_puzzle_3
     from pad_puzzle import prepare_pad_images, create_pad_puzzle
     from pc_puzzle import prepare_pc_desktop_mac, create_pc_puzzle
     from utils import get_image_file
@@ -35,8 +35,8 @@ logger = logging.getLogger(__name__)
 IMGS_DIR = Path(__file__).parent / 'imgs'
 
 # 临时文件列表（在拼图完成后需要清理）
+# 注意：mobile-desktop.png、mobile-desktop-2.png 和 mobile-desktop-3.png 已移除，保留这些文件
 TEMP_FILES = [
-    'mobile-desktop.png',
     'pad-desktop.png',
     'pad-lock.png',
     'pc-desktop-mac.png'
@@ -130,6 +130,8 @@ def process_directory(work_dir: Path, main_color: Optional[str] = None) -> bool:
     # 图片预处理
     logger.info(f"  开始图片预处理...")
     prepare_mobile_desktop(work_dir)
+    prepare_mobile_desktop_2(work_dir)
+    prepare_mobile_desktop_3(work_dir)
     prepare_pad_images(work_dir)
     prepare_pc_desktop_mac(work_dir)
     
@@ -138,12 +140,14 @@ def process_directory(work_dir: Path, main_color: Optional[str] = None) -> bool:
     success = True
     
     success &= create_mobile_puzzle(work_dir, intr_dir, main_color)
+    success &= create_mobile_puzzle_2(work_dir, intr_dir, main_color)
+    success &= create_mobile_puzzle_3(work_dir, intr_dir, main_color)
     success &= create_pc_puzzle(work_dir, intr_dir, main_color)
     success &= create_pad_puzzle(work_dir, intr_dir, main_color)
     
-    # 清理临时文件
-    logger.info(f"  清理临时文件...")
-    cleanup_temp_files(work_dir)
+    # 清理临时文件（暂时注释）
+    # logger.info(f"  清理临时文件...")
+    # cleanup_temp_files(work_dir)
     
     if success:
         logger.info(f"  目录处理完成: {work_dir}")
