@@ -22,7 +22,7 @@ try:
         resize_to_fit_ratio,
         create_background,
         get_image_file,
-        save_optimized_image
+        save_optimized_jpeg
     )
 except ImportError:
     from utils import (
@@ -35,7 +35,7 @@ except ImportError:
         resize_to_fit_ratio,
         create_background,
         get_image_file,
-        save_optimized_image
+        save_optimized_jpeg
     )
 
 logger = logging.getLogger(__name__)
@@ -287,11 +287,11 @@ def create_pad_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str
             bg.paste(img, (x_pos, current_y), img)
             current_y += img.height + SPACING
 
-        # 保存并优化文件大小
-        output_file = output_dir / 'pad-combined.png'
-        save_optimized_image(bg, output_file)
+        # 保存并优化文件大小（压缩到500KB以内）
+        output_file = output_dir / 'pad-combined.jpg'
+        save_optimized_jpeg(bg, output_file, max_size=500 * 1024)
 
-        logger.info(f"  已生成 pad-combined.png")
+        logger.info(f"  已生成 pad-combined.jpg")
         return True
     except Exception as e:
         logger.error(f"  生成 Pad 拼图失败: {e}")
