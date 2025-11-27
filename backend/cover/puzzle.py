@@ -79,7 +79,6 @@ def check_files_completeness(work_dir: Path) -> Tuple[bool, List[str]]:
         'mobile.png',
         'mobile-lock.png',
         'pc.png',
-        'pc-block.png',
         'pad.png'
     ]
     

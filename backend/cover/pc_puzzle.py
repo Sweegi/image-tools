@@ -104,9 +104,8 @@ def create_pc_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str]
     """
     创建 PC 拼图
     要求：
-    - 如果存在 pc-block.png，则拼接 pc-block.png 和 pc-desktop-mac.png
-    - 如果不存在 pc-block.png，则只处理 pc.png 和 pc-desktop-mac.png
-    - 单个图片宽度占整体图片的75%（无 pc-block 时）或80%（有 pc-block 时），高度占40%，两张图片之间保留间隔
+    - 使用 pc.png 和 pc-desktop-mac.png 进行拼图
+    - 单个图片宽度占整体图片的80%，高度占40%，两张图片之间保留间隔
 
     Args:
         work_dir: 工作目录
@@ -123,20 +122,12 @@ def create_pc_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str]
         logger.info(f"  未找到 pc.png，跳过 PC 壁纸拼接")
         return True
 
-    pc_block_file = get_image_file(work_dir, 'pc-block')
     pc_desktop_mac_file = work_dir / 'pc-desktop-mac.png'
 
-    # 如果不存在 pc-block，则使用 pc.png 和 pc-desktop-mac.png
-    if not pc_block_file:
-        # 检查是否有 pc.png 和 pc-desktop-mac.png
-        if not pc_desktop_mac_file.exists():
-            logger.error(f"  缺少 PC 拼图所需文件（需要 pc-desktop-mac.png）")
-            return False
-    else:
-        # 如果存在 pc-block，检查是否有 pc-desktop-mac.png
-        if not pc_desktop_mac_file.exists():
-            logger.error(f"  缺少 PC 拼图所需文件（需要 pc-desktop-mac.png）")
-            return False
+    # 检查是否有 pc-desktop-mac.png
+    if not pc_desktop_mac_file.exists():
+        logger.error(f"  缺少 PC 拼图所需文件（需要 pc-desktop-mac.png）")
+        return False
 
     try:
         # 先确定画布尺寸（1:1 比例）
@@ -145,40 +136,30 @@ def create_pc_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str]
         canvas_width = int(base_height * (OUTPUT_RATIO[0] / OUTPUT_RATIO[1]))
         canvas_height = base_height
 
-        # 计算单张图片的目标尺寸
+        # 准备原始图片文件路径和图片对象
+        image_files = []
+        source_img = None
+
+        # 使用 pc.png 和 pc-desktop-mac.png 进行拼图
         # 宽度占80%
         width_ratio = 0.8
+        
+        if pc_file:
+            image_files.append(('pc', pc_file))
+            if source_img is None:
+                source_img = Image.open(pc_file)
+
+        if pc_desktop_mac_file.exists():
+            image_files.append(('desktop', pc_desktop_mac_file))
+            if source_img is None:
+                source_img = Image.open(pc_desktop_mac_file)
+
+        # 计算单张图片的目标尺寸
         target_content_width = int(canvas_width * width_ratio)
         target_content_height = int(canvas_height * 0.4)
 
         # 目标输入比例是 16:9
         target_input_ratio = 16 / 9
-
-        # 准备原始图片文件路径和图片对象
-        image_files = []
-        source_img = None
-
-        if pc_block_file:
-            # 如果存在 pc-block，使用 pc-block 和 pc-desktop-mac
-            image_files.append(('block', pc_block_file))
-            if source_img is None:
-                source_img = Image.open(pc_block_file)
-
-            if pc_desktop_mac_file.exists():
-                image_files.append(('desktop', pc_desktop_mac_file))
-                if source_img is None:
-                    source_img = Image.open(pc_desktop_mac_file)
-        else:
-            # 如果不存在 pc-block，使用 pc.png 和 pc-desktop-mac.png
-            if pc_file:
-                image_files.append(('pc', pc_file))
-                if source_img is None:
-                    source_img = Image.open(pc_file)
-
-            if pc_desktop_mac_file.exists():
-                image_files.append(('desktop', pc_desktop_mac_file))
-                if source_img is None:
-                    source_img = Image.open(pc_desktop_mac_file)
 
         if not image_files:
             return False
