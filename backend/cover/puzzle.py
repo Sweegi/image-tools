@@ -10,18 +10,19 @@ import argparse
 import logging
 from pathlib import Path
 from typing import Optional, Tuple, List
+from PIL import Image
 
 # 尝试相对导入，如果失败则使用绝对导入
 try:
     from .mobile_puzzle import prepare_mobile_desktop, create_mobile_puzzle, prepare_mobile_desktop_2, create_mobile_puzzle_2, prepare_mobile_desktop_3, create_mobile_puzzle_3
     from .pad_puzzle import prepare_pad_images, create_pad_puzzle
     from .pc_puzzle import prepare_pc_desktop_mac, create_pc_puzzle
-    from .utils import get_image_file
+    from .utils import get_image_file, BACK_IMAGE, save_optimized_image, add_shadow_and_rounded_corners
 except ImportError:
     from mobile_puzzle import prepare_mobile_desktop, create_mobile_puzzle, prepare_mobile_desktop_2, create_mobile_puzzle_2, prepare_mobile_desktop_3, create_mobile_puzzle_3
     from pad_puzzle import prepare_pad_images, create_pad_puzzle
     from pc_puzzle import prepare_pc_desktop_mac, create_pc_puzzle
-    from utils import get_image_file
+    from utils import get_image_file, BACK_IMAGE, save_optimized_image, add_shadow_and_rounded_corners
 
 # 配置日志
 logging.basicConfig(
@@ -33,6 +34,7 @@ logger = logging.getLogger(__name__)
 
 # 常量定义
 IMGS_DIR = Path(__file__).parent / 'imgs'
+MOBILE_IMGS_DIR = Path(__file__).parent / 'mobile-imgs'
 
 # 临时文件列表（在拼图完成后需要清理）
 # 注意：mobile-desktop.png、mobile-desktop-2.png 和 mobile-desktop-3.png 已移除，保留这些文件
@@ -156,6 +158,144 @@ def process_directory(work_dir: Path, main_color: Optional[str] = None) -> bool:
     return success
 
 
+def process_mobile_imgs_directory(source_dir: Path, result_dir: Path) -> bool:
+    """
+    处理 mobile-imgs 下的目录，将图片拼接到 back.jpg 上
+    
+    Args:
+        source_dir: 源目录（如 "aaa"）
+        result_dir: 结果目录（如 "aaa-result"）
+    
+    Returns:
+        是否成功
+    """
+    logger.info(f"处理 mobile-imgs 目录: {source_dir}")
+    
+    # 检查 back.jpg 是否存在
+    if not BACK_IMAGE.exists():
+        logger.error(f"  缺少底图: {BACK_IMAGE}")
+        return False
+    
+    # 检查源目录是否存在
+    if not source_dir.exists() or not source_dir.is_dir():
+        logger.error(f"  源目录不存在: {source_dir}")
+        return False
+    
+    # 创建结果目录
+    result_dir.mkdir(parents=True, exist_ok=True)
+    
+    # 打开底图
+    try:
+        back_img = Image.open(BACK_IMAGE)
+        # 确保底图是 RGB 模式
+        if back_img.mode != 'RGB':
+            back_img = back_img.convert('RGB')
+        back_width, back_height = back_img.size
+        logger.info(f"  底图尺寸: {back_width}x{back_height}")
+    except Exception as e:
+        logger.error(f"  打开底图失败: {e}")
+        return False
+    
+    # 计算最大尺寸（70%）
+    max_width = int(back_width * 0.7)
+    max_height = int(back_height * 0.7)
+    
+    # 支持的图片格式
+    image_extensions = ['.png', '.jpg', '.jpeg', '.webp']
+    
+    # 获取所有图片文件
+    image_files = []
+    for ext in image_extensions:
+        image_files.extend(source_dir.glob(f'*{ext}'))
+        image_files.extend(source_dir.glob(f'*{ext.upper()}'))
+    
+    if not image_files:
+        logger.warning(f"  未找到任何图片文件")
+        return False
+    
+    logger.info(f"  找到 {len(image_files)} 张图片")
+    
+    success_count = 0
+    for img_file in image_files:
+        try:
+            # 打开图片
+            img = Image.open(img_file)
+            img_width, img_height = img.size
+            
+            # 计算缩放比例，保持宽高比，不超过最大尺寸
+            width_ratio = max_width / img_width if img_width > 0 else 1
+            height_ratio = max_height / img_height if img_height > 0 else 1
+            scale = min(width_ratio, height_ratio, 1.0)  # 不超过 1.0，不放大
+            
+            # 计算新尺寸
+            new_width = int(img_width * scale)
+            new_height = int(img_height * scale)
+            
+            # 调整图片尺寸（保持比例）
+            if scale < 1.0:
+                img = img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            
+            # 添加圆角和阴影效果（使图片看起来更自然，不会那么突兀）
+            img_with_effects = add_shadow_and_rounded_corners(img)
+            
+            # 创建底图副本
+            result_img = back_img.copy()
+            
+            # 计算居中位置（需要考虑阴影增加的边距）
+            x_offset = (back_width - img_with_effects.width) // 2
+            y_offset = (back_height - img_with_effects.height) // 2
+            
+            # 粘贴带效果的图片（自动处理透明通道）
+            result_img.paste(img_with_effects, (x_offset, y_offset), img_with_effects)
+            
+            # 保存结果
+            output_file = result_dir / img_file.name
+            save_optimized_image(result_img, output_file)
+            
+            logger.info(f"  已处理: {img_file.name} -> {output_file.name}")
+            success_count += 1
+            
+        except Exception as e:
+            logger.error(f"  处理图片 {img_file.name} 失败: {e}")
+    
+    logger.info(f"  处理完成: {success_count}/{len(image_files)} 张图片成功")
+    return success_count > 0
+
+
+def process_mobile_imgs() -> None:
+    """
+    处理 mobile-imgs 目录下的所有子目录
+    遍历所有子目录，对每个目录进行拼图处理，结果保存到对应的 "目录名-result" 目录
+    """
+    if not MOBILE_IMGS_DIR.exists():
+        logger.info(f"mobile-imgs 目录不存在，跳过")
+        return
+    
+    # 获取所有子目录
+    subdirs = [d for d in MOBILE_IMGS_DIR.iterdir() if d.is_dir() and not d.name.endswith('-result')]
+    
+    if not subdirs:
+        logger.info(f"mobile-imgs 目录下没有找到子目录，跳过")
+        return
+    
+    logger.info(f"找到 {len(subdirs)} 个子目录需要处理")
+    
+    success_count = 0
+    for source_dir in subdirs:
+        try:
+            # 结果目录名称：源目录名 + "-result"
+            result_dir_name = f"{source_dir.name}-result"
+            result_dir = MOBILE_IMGS_DIR / result_dir_name
+            
+            # 处理目录
+            if process_mobile_imgs_directory(source_dir, result_dir):
+                success_count += 1
+        except Exception as e:
+            logger.error(f"处理目录 {source_dir.name} 时发生错误: {e}")
+    
+    logger.info(f"mobile-imgs 处理完成: {success_count}/{len(subdirs)} 个目录成功")
+
+
 def main():
     """
     主函数
@@ -180,6 +320,12 @@ def main():
         else:
             # 提供了具体的颜色值
             main_color = args.main_color
+    
+    # 处理 mobile-imgs 目录
+    logger.info("=" * 50)
+    logger.info("处理 mobile-imgs 目录")
+    logger.info("=" * 50)
+    process_mobile_imgs()
     
     # 检查 imgs 目录
     if not IMGS_DIR.exists():
