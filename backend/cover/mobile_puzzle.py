@@ -22,7 +22,8 @@ try:
         create_background,
         get_image_file,
         save_optimized_image,
-        save_optimized_jpeg
+        save_optimized_jpeg,
+        add_size_watermark
     )
 except ImportError:
     from utils import (
@@ -35,10 +36,44 @@ except ImportError:
         create_background,
         get_image_file,
         save_optimized_image,
-        save_optimized_jpeg
+        save_optimized_jpeg,
+        add_size_watermark
     )
 
 logger = logging.getLogger(__name__)
+
+
+def crop_to_ratio_center_height(image: Image.Image, target_ratio: float) -> Image.Image:
+    """
+    以中心和高度为基础，裁剪图片宽度将其调整为目标比例
+    
+    Args:
+        image: 原始图片
+        target_ratio: 目标宽高比（宽度/高度）
+    
+    Returns:
+        裁剪后的图片
+    """
+    current_ratio = image.width / image.height
+    
+    # 如果比例已经匹配，直接返回
+    if abs(current_ratio - target_ratio) < 0.01:
+        return image
+    
+    # 保持高度不变，计算目标宽度
+    target_width = int(image.height * target_ratio)
+    
+    # 如果目标宽度大于原图宽度，需要先放大（这种情况很少见，但处理一下）
+    if target_width > image.width:
+        # 先放大到目标宽度，保持高度不变
+        resized = image.resize((target_width, image.height), Image.Resampling.LANCZOS)
+        return resized
+    
+    # 从中心裁剪宽度
+    crop_left = (image.width - target_width) // 2
+    crop_right = crop_left + target_width
+    
+    return image.crop((crop_left, 0, crop_right, image.height))
 
 
 def prepare_mobile_desktop(work_dir: Path) -> bool:
@@ -74,11 +109,9 @@ def prepare_mobile_desktop(work_dir: Path) -> bool:
         cover_ratio = cover_img.width / cover_img.height
         target_ratio = 9 / 19
 
-        # 调整底图尺寸
+        # 调整底图尺寸：如果原图不是 9:19，则以中心和高度为基础，裁剪宽度将其调整为 9:19
         if abs(base_ratio - target_ratio) > 0.01:
-            new_height = base_img.height
-            new_width = int(new_height * target_ratio)
-            base_img = base_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            base_img = crop_to_ratio_center_height(base_img, target_ratio)
 
         # 调整覆盖图尺寸
         if abs(cover_ratio - target_ratio) > 0.01:
@@ -183,6 +216,15 @@ def create_mobile_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[
         original_mobile_lock = Image.open(mobile_lock_file)
         bg = create_background((canvas_width, canvas_height), main_color, original_mobile_lock)
 
+        # 获取原始 mobile.png 图片尺寸
+        mobile_file = get_image_file(work_dir, 'mobile')
+        if mobile_file:
+            original_mobile = Image.open(mobile_file)
+            original_width, original_height = original_mobile.size
+        else:
+            # 如果没有找到 mobile.png，使用 mobile-lock 的尺寸
+            original_width, original_height = original_mobile_lock.size
+
         # 计算居中位置（水平居中，垂直居中）
         x_offset = (canvas_width - total_content_width) // 2
         y_offset = (canvas_height - max(mobile_lock.height, mobile_desktop.height)) // 2
@@ -191,6 +233,9 @@ def create_mobile_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[
         bg.paste(mobile_lock, (x_offset, y_offset), mobile_lock)
         bg.paste(mobile_desktop, (x_offset + mobile_lock.width + SPACING, y_offset), mobile_desktop)
 
+        # 添加尺寸水印（使用原始 mobile.png 的尺寸）
+        bg = add_size_watermark(bg, original_width, original_height)
+        
         # 保存并优化文件大小
         output_file = output_dir / 'mobile-combined.png'
         save_optimized_image(bg, output_file)
@@ -236,11 +281,9 @@ def prepare_mobile_desktop_2(work_dir: Path) -> bool:
         cover_ratio = cover_img.width / cover_img.height
         target_ratio = 9 / 19
 
-        # 调整底图尺寸
+        # 调整底图尺寸：如果原图不是 9:19，则以中心和高度为基础，裁剪宽度将其调整为 9:19
         if abs(base_ratio - target_ratio) > 0.01:
-            new_height = base_img.height
-            new_width = int(new_height * target_ratio)
-            base_img = base_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+            base_img = crop_to_ratio_center_height(base_img, target_ratio)
 
         # 调整覆盖图尺寸
         if abs(cover_ratio - target_ratio) > 0.01:
@@ -351,6 +394,15 @@ def create_mobile_puzzle_2(work_dir: Path, output_dir: Path, main_color: Optiona
         original_mobile_lock = Image.open(mobile_lock_file)
         bg = create_background((canvas_width, canvas_height), main_color, original_mobile_lock)
 
+        # 获取原始 mobile.png 图片尺寸
+        mobile_file = get_image_file(work_dir, 'mobile')
+        if mobile_file:
+            original_mobile = Image.open(mobile_file)
+            original_width, original_height = original_mobile.size
+        else:
+            # 如果没有找到 mobile.png，使用 mobile-lock 的尺寸
+            original_width, original_height = original_mobile_lock.size
+
         # 计算居中位置（水平居中，垂直居中）
         x_offset = (canvas_width - total_content_width) // 2
         y_offset = (canvas_height - max(mobile_lock.height, mobile_desktop_2.height)) // 2
@@ -359,6 +411,9 @@ def create_mobile_puzzle_2(work_dir: Path, output_dir: Path, main_color: Optiona
         bg.paste(mobile_lock, (x_offset, y_offset), mobile_lock)
         bg.paste(mobile_desktop_2, (x_offset + mobile_lock.width + SPACING, y_offset), mobile_desktop_2)
 
+        # 添加尺寸水印（使用原始 mobile.png 的尺寸）
+        bg = add_size_watermark(bg, original_width, original_height)
+        
         # 保存为 JPG 格式（压缩到 500KB 以内）
         output_file = output_dir / 'mobile-combined-2.jpg'
         save_optimized_jpeg(bg, output_file)
@@ -519,6 +574,15 @@ def create_mobile_puzzle_3(work_dir: Path, output_dir: Path, main_color: Optiona
         original_mobile_lock = Image.open(mobile_lock_file)
         bg = create_background((canvas_width, canvas_height), main_color, original_mobile_lock)
 
+        # 获取原始 mobile.png 图片尺寸
+        mobile_file = get_image_file(work_dir, 'mobile')
+        if mobile_file:
+            original_mobile = Image.open(mobile_file)
+            original_width, original_height = original_mobile.size
+        else:
+            # 如果没有找到 mobile.png，使用 mobile-lock 的尺寸
+            original_width, original_height = original_mobile_lock.size
+
         # 计算居中位置（水平居中，垂直居中）
         x_offset = (canvas_width - total_content_width) // 2
         y_offset = (canvas_height - max(mobile_lock.height, mobile_desktop_3.height)) // 2
@@ -527,6 +591,9 @@ def create_mobile_puzzle_3(work_dir: Path, output_dir: Path, main_color: Optiona
         bg.paste(mobile_lock, (x_offset, y_offset), mobile_lock)
         bg.paste(mobile_desktop_3, (x_offset + mobile_lock.width + SPACING, y_offset), mobile_desktop_3)
 
+        # 添加尺寸水印（使用原始 mobile.png 的尺寸）
+        bg = add_size_watermark(bg, original_width, original_height)
+        
         # 保存为 JPG 格式（压缩到 500KB 以内）
         output_file = output_dir / 'mobile-combined-3.jpg'
         save_optimized_jpeg(bg, output_file)
