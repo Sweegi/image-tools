@@ -23,6 +23,7 @@ try:
         get_image_file,
         save_optimized_image,
         save_optimized_jpeg,
+        save_final_puzzle_image,
         add_size_watermark
     )
 except ImportError:
@@ -37,6 +38,7 @@ except ImportError:
         get_image_file,
         save_optimized_image,
         save_optimized_jpeg,
+        save_final_puzzle_image,
         add_size_watermark
     )
 
@@ -236,11 +238,11 @@ def create_mobile_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[
         # 添加尺寸水印（使用原始 mobile.png 的尺寸）
         bg = add_size_watermark(bg, original_width, original_height)
         
-        # 保存并优化文件大小
-        output_file = output_dir / 'mobile-combined.png'
-        save_optimized_image(bg, output_file)
+        # 保存并优化文件大小（统一压缩到200-300KB）
+        output_file = output_dir / 'mobile-combined.jpg'
+        save_final_puzzle_image(bg, output_file)
 
-        logger.info(f"  已生成 mobile-combined.png")
+        logger.info(f"  已生成 mobile-combined.jpg")
         return True
     except Exception as e:
         logger.error(f"  生成 Mobile 拼图失败: {e}")
@@ -414,9 +416,9 @@ def create_mobile_puzzle_2(work_dir: Path, output_dir: Path, main_color: Optiona
         # 添加尺寸水印（使用原始 mobile.png 的尺寸）
         bg = add_size_watermark(bg, original_width, original_height)
         
-        # 保存为 JPG 格式（压缩到 500KB 以内）
+        # 保存并优化文件大小（统一压缩到200-300KB）
         output_file = output_dir / 'mobile-combined-2.jpg'
-        save_optimized_jpeg(bg, output_file)
+        save_final_puzzle_image(bg, output_file)
         logger.info(f"  已生成 mobile-combined-2.jpg")
         return True
     except Exception as e:
@@ -594,9 +596,9 @@ def create_mobile_puzzle_3(work_dir: Path, output_dir: Path, main_color: Optiona
         # 添加尺寸水印（使用原始 mobile.png 的尺寸）
         bg = add_size_watermark(bg, original_width, original_height)
         
-        # 保存为 JPG 格式（压缩到 500KB 以内）
+        # 保存并优化文件大小（统一压缩到200-300KB）
         output_file = output_dir / 'mobile-combined-3.jpg'
-        save_optimized_jpeg(bg, output_file)
+        save_final_puzzle_image(bg, output_file)
         logger.info(f"  已生成 mobile-combined-3.jpg")
         return True
     except Exception as e:

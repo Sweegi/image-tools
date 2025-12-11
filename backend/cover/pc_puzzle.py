@@ -23,7 +23,9 @@ try:
         resize_to_fit_ratio,
         create_background,
         get_image_file,
-        save_optimized_jpeg
+        save_optimized_jpeg,
+        save_final_puzzle_image,
+        add_size_watermark
     )
 except ImportError:
     from utils import (
@@ -37,7 +39,9 @@ except ImportError:
         resize_to_fit_ratio,
         create_background,
         get_image_file,
-        save_optimized_jpeg
+        save_optimized_jpeg,
+        save_final_puzzle_image,
+        add_size_watermark
     )
 
 logger = logging.getLogger(__name__)
@@ -233,6 +237,10 @@ def create_pc_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str]
         # main_color = "#ffffff": 使用纯色背景
         bg = create_background((canvas_width, canvas_height), main_color, source_img)
 
+        # 获取原始 pc.png 图片尺寸
+        original_pc = Image.open(pc_file)
+        original_width, original_height = original_pc.size
+
         # 计算居中位置（水平居中，垂直居中）
         x_offset = (canvas_width - max(img.width for img in processed_images)) // 2
         y_start = (canvas_height - total_content_height) // 2
@@ -245,9 +253,12 @@ def create_pc_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str]
             bg.paste(img, (x_pos, current_y), img)
             current_y += img.height + SPACING
 
-        # 保存并优化文件大小（压缩到500KB以内）
+        # 添加尺寸水印（使用原始 pc.png 的尺寸）
+        bg = add_size_watermark(bg, original_width, original_height)
+        
+        # 保存并优化文件大小（统一压缩到200-300KB）
         output_file = output_dir / 'pc-combined.jpg'
-        save_optimized_jpeg(bg, output_file, max_size=500 * 1024)
+        save_final_puzzle_image(bg, output_file)
 
         logger.info(f"  已生成 pc-combined.jpg")
         return True

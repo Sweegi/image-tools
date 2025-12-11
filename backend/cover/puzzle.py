@@ -17,12 +17,12 @@ try:
     from .mobile_puzzle import prepare_mobile_desktop, create_mobile_puzzle, prepare_mobile_desktop_2, create_mobile_puzzle_2, prepare_mobile_desktop_3, create_mobile_puzzle_3
     from .pad_puzzle import prepare_pad_images, create_pad_puzzle
     from .pc_puzzle import prepare_pc_desktop_mac, create_pc_puzzle
-    from .utils import get_image_file, BACK_IMAGE, save_optimized_image, add_shadow_and_rounded_corners
+    from .utils import get_image_file, BACK_IMAGE, save_optimized_image, save_final_puzzle_image, add_shadow_and_rounded_corners, add_size_watermark
 except ImportError:
     from mobile_puzzle import prepare_mobile_desktop, create_mobile_puzzle, prepare_mobile_desktop_2, create_mobile_puzzle_2, prepare_mobile_desktop_3, create_mobile_puzzle_3
     from pad_puzzle import prepare_pad_images, create_pad_puzzle
     from pc_puzzle import prepare_pc_desktop_mac, create_pc_puzzle
-    from utils import get_image_file, BACK_IMAGE, save_optimized_image, add_shadow_and_rounded_corners
+    from utils import get_image_file, BACK_IMAGE, save_optimized_image, save_final_puzzle_image, add_shadow_and_rounded_corners, add_size_watermark
 
 # 配置日志
 logging.basicConfig(
@@ -100,6 +100,69 @@ def check_files_completeness(work_dir: Path) -> Tuple[bool, List[str]]:
 
 
 
+def generate_image_info_file(work_dir: Path) -> None:
+    """
+    生成图片信息txt文件
+    
+    Args:
+        work_dir: 工作目录
+    """
+    # 支持的图片格式
+    image_extensions = ['.png', '.jpg', '.jpeg', '.webp']
+    
+    # 统计手机壁纸数量（mobile*.png，不包含mobile-lock.png）
+    mobile_count = 0
+    for ext in image_extensions:
+        for file in work_dir.glob(f'mobile*{ext}'):
+            file_name_lower = file.name.lower()
+            # 排除 mobile-lock.png 和 mobile-lock.* 格式的文件
+            if not file_name_lower.startswith('mobile-lock.'):
+                mobile_count += 1
+    
+    # 统计平板壁纸数量（pad*.png）
+    pad_count = 0
+    for ext in image_extensions:
+        pad_count += len(list(work_dir.glob(f'pad*{ext}')))
+    
+    # 统计电脑壁纸数量（pc*.png）
+    pc_count = 0
+    for ext in image_extensions:
+        pc_count += len(list(work_dir.glob(f'pc*{ext}')))
+    
+    # 统计合集目录下的图片数量
+    collection_count = 0
+    collection_dir = work_dir / '合集'
+    if collection_dir.exists() and collection_dir.is_dir():
+        # 使用集合去重，避免重复计算
+        collection_files = set()
+        for ext in image_extensions:
+            # 匹配所有大小写变体
+            collection_files.update(collection_dir.glob(f'*{ext}'))
+            collection_files.update(collection_dir.glob(f'*{ext.upper()}'))
+        collection_count = len(collection_files)
+    
+    # 生成txt文件内容
+    lines = []
+    if mobile_count > 0:
+        lines.append(f"手机壁纸 x {mobile_count}张")
+    if pad_count > 0:
+        lines.append(f"平板壁纸 x {pad_count}张")
+    if pc_count > 0:
+        lines.append(f"电脑壁纸 x {pc_count}张")
+    if collection_count > 0:
+        lines.append(f"赠送{collection_count}张合集9:16手机壁纸")
+    
+    # 如果有内容，写入文件
+    if lines:
+        txt_file = work_dir / '图片信息.txt'
+        try:
+            with open(txt_file, 'w', encoding='utf-8') as f:
+                f.write('\n'.join(lines))
+            logger.info(f"  已生成图片信息文件: {txt_file.name}")
+        except Exception as e:
+            logger.warning(f"  生成图片信息文件失败: {e}")
+
+
 def process_directory(work_dir: Path, main_color: Optional[str] = None) -> bool:
     """
     处理单个目录
@@ -127,6 +190,9 @@ def process_directory(work_dir: Path, main_color: Optional[str] = None) -> bool:
     
     # 创建输出目录
     intr_dir.mkdir(exist_ok=True)
+    
+    # 在图片合并之前统计并生成图片信息txt文件
+    generate_image_info_file(work_dir)
     
     # 图片预处理
     logger.info(f"  开始图片预处理...")
@@ -170,6 +236,11 @@ def process_mobile_imgs_directory(source_dir: Path, result_dir: Path) -> bool:
         是否成功
     """
     logger.info(f"处理 mobile-imgs 目录: {source_dir}")
+    
+    # 检查结果目录是否已存在，如果存在则跳过
+    if result_dir.exists() and result_dir.is_dir():
+        logger.info(f"  结果目录已存在，跳过: {result_dir.name}")
+        return True
     
     # 检查 back.jpg 是否存在
     if not BACK_IMAGE.exists():
@@ -248,9 +319,12 @@ def process_mobile_imgs_directory(source_dir: Path, result_dir: Path) -> bool:
             # 粘贴带效果的图片（自动处理透明通道）
             result_img.paste(img_with_effects, (x_offset, y_offset), img_with_effects)
             
-            # 保存结果
+            # 添加尺寸水印（使用原始图片尺寸）
+            result_img = add_size_watermark(result_img, img_width, img_height)
+            
+            # 保存结果（统一压缩到200-300KB）
             output_file = result_dir / img_file.name
-            save_optimized_image(result_img, output_file)
+            save_final_puzzle_image(result_img, output_file)
             
             logger.info(f"  已处理: {img_file.name} -> {output_file.name}")
             success_count += 1

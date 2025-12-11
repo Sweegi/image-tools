@@ -8,9 +8,10 @@
 import logging
 from pathlib import Path
 from typing import Optional, Tuple
-from PIL import Image, ImageFilter, ImageDraw
+from PIL import Image, ImageFilter, ImageDraw, ImageFont
 import numpy as np
 from sklearn.cluster import KMeans
+import platform
 
 logger = logging.getLogger(__name__)
 
@@ -25,6 +26,8 @@ PC_MAC_COVER = Path(__file__).parent / 'pc-mac-cover.png'
 OUTPUT_RATIO = (1, 1)  # 1:1 比例
 MAX_FILE_SIZE = 2 * 1024 * 1024  # 2MB
 MAX_JPEG_SIZE = 500 * 1024  # 500KB（用于最终输出的 JPG 文件）
+FINAL_PUZZLE_MIN_SIZE = 200 * 1024  # 200KB（最终拼图结果最小大小）
+FINAL_PUZZLE_MAX_SIZE = 300 * 1024  # 300KB（最终拼图结果最大大小）
 BORDER_RADIUS = 25  # 圆角半径（从20增加到25）
 SHADOW_OFFSET = (5, 5)
 SHADOW_BLUR = 10
@@ -403,3 +406,326 @@ def save_optimized_jpeg(image: Image.Image, output_file: Path, max_size: int = M
         image.save(output_file, 'JPEG', quality=30, optimize=True)
         file_size = output_file.stat().st_size
         logger.info(f"  已缩小尺寸并保存为 JPEG（最低质量），大小: {file_size / 1024:.2f}KB")
+
+
+def save_final_puzzle_image(image: Image.Image, output_file: Path, target_size: int = 250 * 1024) -> None:
+    """
+    保存最终拼图结果图片，统一压缩到200-300KB之间
+    
+    Args:
+        image: 图片对象
+        output_file: 输出文件路径
+        target_size: 目标文件大小（字节），默认250KB，会在200-300KB范围内调整
+    """
+    # 确保目标大小在合理范围内
+    min_size = FINAL_PUZZLE_MIN_SIZE  # 200KB
+    max_size = FINAL_PUZZLE_MAX_SIZE  # 300KB
+    if target_size < min_size:
+        target_size = min_size
+    elif target_size > max_size:
+        target_size = max_size
+    
+    # 确保图片是 RGB 模式（JPEG 不支持透明通道）
+    if image.mode == 'RGBA':
+        bg = Image.new('RGB', image.size, (255, 255, 255))
+        bg.paste(image, mask=image.split()[3])
+        image = bg
+    elif image.mode != 'RGB':
+        image = image.convert('RGB')
+    
+    # 如果输出文件是PNG，改为JPG
+    if output_file.suffix.lower() == '.png':
+        output_file = output_file.with_suffix('.jpg')
+    
+    # 先尝试高质量保存，检查文件大小
+    current_quality = 95
+    best_quality = current_quality
+    best_size = 0
+    
+    # 从高质量开始逐步降低，找到最接近目标大小的质量
+    while current_quality >= 30:
+        image.save(output_file, 'JPEG', quality=current_quality, optimize=True)
+        file_size = output_file.stat().st_size
+        
+        # 如果文件大小在目标范围内，直接返回
+        if min_size <= file_size <= max_size:
+            logger.info(f"  已保存最终拼图结果，质量: {current_quality}，大小: {file_size / 1024:.2f}KB")
+            return
+        
+        # 记录最接近目标大小的质量
+        if best_size == 0 or abs(file_size - target_size) < abs(best_size - target_size):
+            best_quality = current_quality
+            best_size = file_size
+        
+        # 如果文件太大，继续降低质量
+        if file_size > max_size:
+            current_quality -= 5
+        # 如果文件太小，需要提高质量（但我们已经从高到低，所以这种情况不应该发生）
+        else:
+            break
+    
+    # 如果找到的质量对应的文件大小不在范围内，需要调整
+    if best_size > max_size:
+        # 文件太大，需要缩小尺寸
+        # 计算缩放比例，使文件大小接近目标大小
+        scale = (target_size / best_size) ** 0.5
+        new_size = (int(image.width * scale), int(image.height * scale))
+        resized_image = image.resize(new_size, Image.Resampling.LANCZOS)
+        
+        # 重新尝试保存，从较高质量开始
+        current_quality = 85
+        while current_quality >= 30:
+            resized_image.save(output_file, 'JPEG', quality=current_quality, optimize=True)
+            file_size = output_file.stat().st_size
+            
+            if min_size <= file_size <= max_size:
+                logger.info(f"  已缩小尺寸并保存最终拼图结果，质量: {current_quality}，大小: {file_size / 1024:.2f}KB")
+                return
+            
+            if file_size > max_size:
+                current_quality -= 5
+            else:
+                # 文件太小，使用当前质量即可
+                logger.info(f"  已缩小尺寸并保存最终拼图结果，质量: {current_quality}，大小: {file_size / 1024:.2f}KB")
+                return
+        
+        # 如果还是太大，使用最低质量
+        resized_image.save(output_file, 'JPEG', quality=30, optimize=True)
+        file_size = output_file.stat().st_size
+        logger.info(f"  已缩小尺寸并保存最终拼图结果（最低质量），大小: {file_size / 1024:.2f}KB")
+    elif best_size < min_size:
+        # 文件太小，使用最佳质量即可（这种情况很少见）
+        image.save(output_file, 'JPEG', quality=best_quality, optimize=True)
+        logger.info(f"  已保存最终拼图结果，质量: {best_quality}，大小: {best_size / 1024:.2f}KB")
+    else:
+        # 使用最佳质量
+        image.save(output_file, 'JPEG', quality=best_quality, optimize=True)
+        logger.info(f"  已保存最终拼图结果，质量: {best_quality}，大小: {best_size / 1024:.2f}KB")
+
+
+def get_font_path() -> Optional[str]:
+    """
+    获取支持中文的字体路径
+    
+    Returns:
+        字体路径，如果找不到则返回 None
+    """
+    system = platform.system()
+    
+    if system == 'Windows':
+        # Windows 系统
+        font_paths = [
+            'C:/Windows/Fonts/msyh.ttc',  # 微软雅黑
+            'C:/Windows/Fonts/msyhbd.ttc',  # 微软雅黑 Bold
+            'C:/Windows/Fonts/simhei.ttf',  # 黑体（备选）
+            'C:/Windows/Fonts/simsun.ttc',  # 宋体
+        ]
+    elif system == 'Darwin':  # macOS
+        font_paths = [
+            '/System/Library/Fonts/PingFang.ttc',  # 苹方
+            '/System/Library/Fonts/STHeiti Light.ttc',  # 黑体
+            '/System/Library/Fonts/STSong.ttc',  # 宋体
+        ]
+    else:  # Linux
+        font_paths = [
+            # 微软雅黑（如果安装了）
+            '/usr/share/fonts/truetype/microsoft/msyh.ttc',
+            '/usr/share/fonts/truetype/microsoft/msyhbd.ttc',
+            # 文泉驿字体
+            '/usr/share/fonts/truetype/wqy/wqy-microhei.ttc',  # 文泉驿微米黑
+            '/usr/share/fonts/truetype/wqy/wqy-zenhei.ttc',  # 文泉驿正黑
+            '/usr/share/fonts/truetype/wqy/wqy-unibit.ttc',  # 文泉驿点阵正黑
+            # AR PL 字体
+            '/usr/share/fonts/truetype/arphic/uming.ttc',  # AR PL UMing
+            '/usr/share/fonts/truetype/arphic/ukai.ttc',  # AR PL UKai
+            # Noto 字体（Google 开源字体）
+            '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
+            '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.otf',
+            # 思源字体
+            '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.otf',
+            '/usr/share/fonts/truetype/noto/NotoSansCJK-Regular.ttc',
+            # 其他常见路径
+            '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf',  # DejaVu（不支持中文，但作为最后备选）
+        ]
+    
+    # 按顺序检查字体文件是否存在
+    for font_path in font_paths:
+        if Path(font_path).exists():
+            # 验证字体是否支持中文（简单测试：尝试加载字体）
+            try:
+                test_font = ImageFont.truetype(font_path, 12)
+                # 如果能成功加载，返回路径
+                return font_path
+            except Exception:
+                # 如果加载失败，继续尝试下一个
+                continue
+    
+    # 如果所有预设路径都找不到，尝试使用 fontconfig 查找（如果可用）
+    try:
+        import subprocess
+        result = subprocess.run(
+            ['fc-list', ':lang=zh', 'family'],
+            capture_output=True,
+            text=True,
+            timeout=2
+        )
+        if result.returncode == 0 and result.stdout:
+            # 尝试查找字体文件路径
+            result_path = subprocess.run(
+                ['fc-match', '-f', '%{file}', ':lang=zh'],
+                capture_output=True,
+                text=True,
+                timeout=2
+            )
+            if result_path.returncode == 0 and result_path.stdout.strip():
+                font_file = result_path.stdout.strip()
+                if Path(font_file).exists():
+                    return font_file
+    except Exception:
+        pass
+    
+    return None
+
+
+def add_size_watermark(image: Image.Image, original_width: int, original_height: int, font_size: Optional[int] = None) -> Image.Image:
+    """
+    在图片上添加尺寸水印（显示原始图片尺寸）
+    
+    Args:
+        image: 图片对象（最终拼图结果）
+        original_width: 原始待拼图图片的宽度
+        original_height: 原始待拼图图片的高度
+        font_size: 字体大小，如果为 None 则根据图片尺寸自动计算
+    
+    Returns:
+        添加水印后的图片
+    """
+    # 获取最终图片尺寸（用于计算位置）
+    width, height = image.size
+    
+    # 生成文字：图片尺寸：宽度x高度
+    size_text = f"图片尺寸：{original_width}x{original_height}"
+    
+    # 计算字体大小（根据图片高度）
+    if font_size is None:
+        font_size = max(24, int(height * 0.025))  # 至少24px，或图片高度的2.5%
+    
+    # 创建图片副本
+    result_img = image.copy()
+    
+    # 创建绘图对象
+    draw = ImageDraw.Draw(result_img)
+    
+    # 尝试加载支持中文的字体
+    font = None
+    font_path = get_font_path()
+    if font_path:
+        try:
+            font = ImageFont.truetype(font_path, font_size)
+            logger.debug(f"成功加载中文字体: {font_path}")
+        except Exception as e:
+            logger.debug(f"加载字体失败 {font_path}: {e}")
+            font = None
+    
+    # 如果字体加载失败，尝试使用 fontconfig 查找字体（如果可用）
+    if font is None:
+        try:
+            import subprocess
+            result = subprocess.run(
+                ['fc-match', '-f', '%{file}', ':lang=zh'],
+                capture_output=True,
+                text=True,
+                timeout=2,
+                stderr=subprocess.DEVNULL
+            )
+            if result.returncode == 0 and result.stdout.strip():
+                font_file = result.stdout.strip()
+                if Path(font_file).exists():
+                    try:
+                        font = ImageFont.truetype(font_file, font_size)
+                        logger.debug(f"通过 fontconfig 加载中文字体: {font_file}")
+                    except Exception as e:
+                        logger.debug(f"通过 fontconfig 加载字体失败: {e}")
+        except FileNotFoundError:
+            # fontconfig 未安装，跳过
+            pass
+        except Exception as e:
+            logger.debug(f"使用 fontconfig 查找字体时出错: {e}")
+    
+    # 如果仍然没有找到支持中文的字体，尝试查找系统中任何可能的中文字体
+    if font is None:
+        # 尝试查找常见的中文字体目录
+        common_font_dirs = [
+            '/usr/share/fonts',
+            '/usr/local/share/fonts',
+            '~/.fonts',
+            '~/.local/share/fonts',
+        ]
+        
+        for font_dir in common_font_dirs:
+            font_dir_path = Path(font_dir).expanduser()
+            if font_dir_path.exists():
+                # 查找可能的中文字体文件
+                for pattern in ['*.ttc', '*.ttf', '*.otf']:
+                    for font_file in font_dir_path.rglob(pattern):
+                        try:
+                            # 尝试加载字体
+                            test_font = ImageFont.truetype(str(font_file), font_size)
+                            # 简单测试：检查字体是否支持中文（通过检查字体名称或尝试渲染）
+                            font = test_font
+                            logger.info(f"找到并使用中文字体: {font_file}")
+                            break
+                        except Exception:
+                            continue
+                    if font is not None:
+                        break
+                if font is not None:
+                    break
+    
+    # 如果仍然没有找到支持中文的字体，尝试使用默认字体并给出警告
+    if font is None:
+        logger.warning("未找到支持中文的字体，'图片尺寸'四个字可能显示为乱码。")
+        logger.warning("建议安装中文字体，例如：")
+        logger.warning("  Ubuntu/Debian: sudo apt-get install fonts-wqy-microhei")
+        logger.warning("  或者: sudo apt-get install fonts-noto-cjk")
+        
+        # 尝试使用默认字体（虽然不支持中文，但至少不会崩溃）
+        try:
+            font = ImageFont.truetype("arial.ttf", font_size)
+        except:
+            try:
+                font = ImageFont.truetype("DejaVuSans.ttf", font_size)
+            except:
+                # 使用默认字体，但需要处理中文编码问题
+                font = ImageFont.load_default()
+                # 如果使用默认字体，将中文替换为英文
+                size_text = f"Size: {original_width}x{original_height}"
+                logger.warning("使用默认字体，将中文替换为英文以避免乱码")
+    
+    # 获取文字尺寸（处理可能的编码错误）
+    try:
+        bbox = draw.textbbox((0, 0), size_text, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+    except (UnicodeEncodeError, UnicodeError):
+        # 如果出现编码错误，使用英文替代
+        size_text = f"Size: {original_width}x{original_height}"
+        logger.warning("字体不支持中文，使用英文替代")
+        bbox = draw.textbbox((0, 0), size_text, font=font)
+        text_width = bbox[2] - bbox[0]
+        text_height = bbox[3] - bbox[1]
+    
+    # 计算文字位置：水平居中，距离底部3%
+    x = (width - text_width) // 2
+    y = int(height * 0.97) - text_height  # 距离底部3%
+    
+    # 绘制文字（黑色）
+    try:
+        draw.text((x, y), size_text, fill=(0, 0, 0), font=font)
+    except (UnicodeEncodeError, UnicodeError):
+        # 如果绘制时出现编码错误，使用英文替代
+        size_text = f"Size: {original_width}x{original_height}"
+        logger.warning("绘制文字时出现编码错误，使用英文替代")
+        draw.text((x, y), size_text, fill=(0, 0, 0), font=font)
+    
+    return result_img
