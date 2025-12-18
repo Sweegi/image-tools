@@ -119,15 +119,25 @@ def generate_image_info_file(work_dir: Path) -> None:
             if not file_name_lower.startswith('mobile-lock.'):
                 mobile_count += 1
     
-    # 统计平板壁纸数量（pad*.png）
+    # 统计平板壁纸数量（pad*.png，排除生成的临时文件）
     pad_count = 0
+    exclude_pad_files = {'pad-desktop.png', 'pad-lock.png'}
     for ext in image_extensions:
-        pad_count += len(list(work_dir.glob(f'pad*{ext}')))
+        for file in work_dir.glob(f'pad*{ext}'):
+            file_name_lower = file.name.lower()
+            # 排除生成的临时文件
+            if file_name_lower not in exclude_pad_files:
+                pad_count += 1
     
-    # 统计电脑壁纸数量（pc*.png）
+    # 统计电脑壁纸数量（pc*.png，排除生成的临时文件）
     pc_count = 0
+    exclude_pc_files = {'pc-desktop-mac.png'}
     for ext in image_extensions:
-        pc_count += len(list(work_dir.glob(f'pc*{ext}')))
+        for file in work_dir.glob(f'pc*{ext}'):
+            file_name_lower = file.name.lower()
+            # 排除生成的临时文件
+            if file_name_lower not in exclude_pc_files:
+                pc_count += 1
     
     # 统计合集目录下的图片数量
     collection_count = 0
