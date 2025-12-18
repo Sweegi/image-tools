@@ -218,13 +218,20 @@ def process_directory(work_dir: Path, back_img: Image.Image) -> bool:
     return success_count > 0
 
 
-def create_single_avatar_display(avatar_img: Image.Image, back_img: Image.Image) -> Image.Image:
+def create_single_avatar_display(
+    avatar_img: Image.Image, 
+    back_img: Image.Image,
+    circle_img: Optional[Image.Image] = None,
+    circle_position: str = 'right'  # 'right' 右下角, 'left' 左下角
+) -> Image.Image:
     """
     创建单个头像的3:4展示页面
     
     Args:
-        avatar_img: 头像图片
+        avatar_img: 方形头像图片
         back_img: 底图
+        circle_img: 圆形头像图片（如果为None，则使用avatar_img）
+        circle_position: 圆形图片位置，'right'为右下角，'left'为左下角
     
     Returns:
         3:4比例的展示图片
@@ -263,21 +270,35 @@ def create_single_avatar_display(avatar_img: Image.Image, back_img: Image.Image)
     circle_diameter = int(base_circle_diameter * 1.5)  # 放大50%
     
     # 创建圆形头像（带白色边框和白灰色外边框，外边框加粗到24px）
-    circle_img = create_circular_image(avatar_img, border_width=8, outer_border_width=24)
-    if circle_img.width != circle_diameter:
-        circle_img = circle_img.resize((circle_diameter, circle_diameter), Image.Resampling.LANCZOS)
+    # 如果指定了circle_img，使用指定的图片；否则使用avatar_img
+    circle_source_img = circle_img if circle_img is not None else avatar_img
+    circle_img_processed = create_circular_image(circle_source_img, border_width=8, outer_border_width=24)
+    if circle_img_processed.width != circle_diameter:
+        circle_img_processed = circle_img_processed.resize((circle_diameter, circle_diameter), Image.Resampling.LANCZOS)
     
     # 计算方形图片的位置（居中上方）
     square_x = (target_width - square_img_with_effects.width) // 2
     square_y = int(target_height * 0.15)  # 距离顶部15%
     
-    # 计算圆形图片的位置（方形图片的右下角，有重叠）
+    # 计算圆形图片的位置
     # 注意：需要考虑方形图片添加阴影后的实际尺寸
     square_actual_width = square_img_with_effects.width
     square_actual_height = square_img_with_effects.height
     overlap = circle_diameter // 3  # 重叠部分
-    circle_x = square_x + square_actual_width - circle_diameter + overlap
-    circle_y = square_y + square_actual_height - circle_diameter + overlap
+    
+    if circle_position == 'left':
+        # 左下角位置：计算右下角圆形图片距离右边缘的间隔，让左下角圆形图片距离左边缘的间隔与之相同
+        # 右下角圆形图片的右边缘位置
+        right_circle_right_edge = square_x + square_actual_width + overlap
+        # 右下角圆形图片距离右边缘的间隔
+        right_margin = target_width - right_circle_right_edge
+        # 左下角圆形图片的左边缘应该距离左边缘相同的间隔
+        circle_x = right_margin
+        circle_y = square_y + square_actual_height - circle_diameter + overlap
+    else:
+        # 右下角位置（默认）
+        circle_x = square_x + square_actual_width - circle_diameter + overlap
+        circle_y = square_y + square_actual_height - circle_diameter + overlap
     
     # 确保圆形图片不超出边界
     circle_x = max(0, min(circle_x, target_width - circle_diameter))
@@ -287,7 +308,7 @@ def create_single_avatar_display(avatar_img: Image.Image, back_img: Image.Image)
     canvas.paste(square_img_with_effects, (square_x, square_y), square_img_with_effects)
     
     # 粘贴圆形图片（在方形图片之上，因为有重叠）
-    canvas.paste(circle_img, (circle_x, circle_y), circle_img)
+    canvas.paste(circle_img_processed, (circle_x, circle_y), circle_img_processed)
     
     return canvas
 
@@ -312,47 +333,112 @@ def process_single_avatars(work_dir: Path, back1_img: Image.Image) -> bool:
         logger.info(f"  结果目录已存在，跳过: {result_dir_name}")
         return True
     
-    # 查找所有头像文件（*-a.png 和 *-b.png）
-    avatar_files = []
-    for pattern in ['*-a.png', '*-b.png']:
-        avatar_files.extend(work_dir.glob(pattern))
+    # 查找所有头像文件
+    a_files = sorted(work_dir.glob('*-a.png'))
+    b_files = sorted(work_dir.glob('*-b.png'))
+    other_files = []
     
-    if not avatar_files:
+    # 查找其他非成对的图片文件
+    all_png_files = sorted(work_dir.glob('*.png'))
+    for png_file in all_png_files:
+        if not png_file.name.endswith('-a.png') and not png_file.name.endswith('-b.png'):
+            other_files.append(png_file)
+    
+    if not a_files and not b_files and not other_files:
         logger.warning(f"  未找到任何头像文件")
         return False
     
-    logger.info(f"  找到 {len(avatar_files)} 个头像文件")
+    logger.info(f"  找到 {len(a_files)} 个a图, {len(b_files)} 个b图, {len(other_files)} 个其他图片")
     
     # 创建结果目录
     result_dir.mkdir(parents=True, exist_ok=True)
     
     success_count = 0
-    for avatar_file in sorted(avatar_files):
+    processed_pairs = set()  # 记录已处理的配对
+    
+    # 处理成对的a-b图片
+    for a_file in a_files:
+        # 查找对应的b文件
+        b_file_name = a_file.name.replace('-a.png', '-b.png')
+        b_file = work_dir / b_file_name
+        
+        if b_file.exists() and b_file in b_files:
+            # 成对处理
+            processed_pairs.add(a_file.name)
+            processed_pairs.add(b_file.name)
+            
+            try:
+                # 处理a图：方形用a图，圆形用b图，位置在右下角
+                a_img = Image.open(a_file)
+                b_img = Image.open(b_file)
+                
+                if a_img.mode not in ('RGB', 'RGBA'):
+                    a_img = a_img.convert('RGBA')
+                if b_img.mode not in ('RGB', 'RGBA'):
+                    b_img = b_img.convert('RGBA')
+                
+                # 创建a图的展示页面
+                display_img_a = create_single_avatar_display(
+                    a_img, back1_img, circle_img=b_img, circle_position='right'
+                )
+                output_name_a = a_file.stem + '.jpg'
+                output_file_a = result_dir / output_name_a
+                save_final_puzzle_image(display_img_a, output_file_a)
+                logger.info(f"  已处理: {a_file.name} -> {output_name_a} (方形:a, 圆形:b, 右下角)")
+                success_count += 1
+                
+                # 处理b图：方形用b图，圆形用a图，位置在左下角
+                display_img_b = create_single_avatar_display(
+                    b_img, back1_img, circle_img=a_img, circle_position='left'
+                )
+                output_name_b = b_file.stem + '.jpg'
+                output_file_b = result_dir / output_name_b
+                save_final_puzzle_image(display_img_b, output_file_b)
+                logger.info(f"  已处理: {b_file.name} -> {output_name_b} (方形:b, 圆形:a, 左下角)")
+                success_count += 1
+                
+            except Exception as e:
+                logger.error(f"  处理头像配对失败 {a_file.name} + {b_file.name}: {e}")
+    
+    # 处理单独的b文件（没有对应a文件的）
+    for b_file in b_files:
+        if b_file.name not in processed_pairs:
+            try:
+                b_img = Image.open(b_file)
+                if b_img.mode not in ('RGB', 'RGBA'):
+                    b_img = b_img.convert('RGBA')
+                
+                # 保持原有逻辑：方形和圆形都用b图
+                display_img = create_single_avatar_display(b_img, back1_img)
+                output_name = b_file.stem + '.jpg'
+                output_file = result_dir / output_name
+                save_final_puzzle_image(display_img, output_file)
+                logger.info(f"  已处理: {b_file.name} -> {output_name} (单独文件)")
+                success_count += 1
+                
+            except Exception as e:
+                logger.error(f"  处理头像文件失败 {b_file.name}: {e}")
+    
+    # 处理其他非成对的图片文件
+    for other_file in other_files:
         try:
-            # 打开头像图片
-            avatar_img = Image.open(avatar_file)
+            other_img = Image.open(other_file)
+            if other_img.mode not in ('RGB', 'RGBA'):
+                other_img = other_img.convert('RGBA')
             
-            # 确保图片是 RGB 或 RGBA 模式
-            if avatar_img.mode not in ('RGB', 'RGBA'):
-                avatar_img = avatar_img.convert('RGBA')
-            
-            # 创建展示页面
-            display_img = create_single_avatar_display(avatar_img, back1_img)
-            
-            # 生成输出文件名（使用原文件名，改为.jpg）
-            output_name = avatar_file.stem + '.jpg'
+            # 保持原有逻辑：方形和圆形都用同一张图
+            display_img = create_single_avatar_display(other_img, back1_img)
+            output_name = other_file.stem + '.jpg'
             output_file = result_dir / output_name
-            
-            # 保存结果（压缩到300KB以下）
             save_final_puzzle_image(display_img, output_file)
-            
-            logger.info(f"  已处理: {avatar_file.name} -> {output_name}")
+            logger.info(f"  已处理: {other_file.name} -> {output_name} (单独文件)")
             success_count += 1
             
         except Exception as e:
-            logger.error(f"  处理头像文件失败 {avatar_file.name}: {e}")
+            logger.error(f"  处理头像文件失败 {other_file.name}: {e}")
     
-    logger.info(f"  处理完成: {success_count}/{len(avatar_files)} 个头像成功")
+    total_files = len(a_files) + len(b_files) + len(other_files)
+    logger.info(f"  处理完成: {success_count}/{total_files} 个头像成功")
     return success_count > 0
 
 
