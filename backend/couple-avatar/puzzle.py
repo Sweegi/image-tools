@@ -15,12 +15,14 @@ from PIL import Image
 try:
     from .utils import (
         BACK_IMAGE, BACK1_IMAGE, add_shadow_and_rounded_corners, 
-        save_final_puzzle_image, create_circular_image, create_rounded_square_image
+        save_final_puzzle_image, create_circular_image, create_rounded_square_image,
+        create_couple_background, add_border
     )
 except ImportError:
     from utils import (
         BACK_IMAGE, BACK1_IMAGE, add_shadow_and_rounded_corners, 
-        save_final_puzzle_image, create_circular_image, create_rounded_square_image
+        save_final_puzzle_image, create_circular_image, create_rounded_square_image,
+        create_couple_background, add_border
     )
 
 # 配置日志
@@ -75,7 +77,7 @@ def create_couple_puzzle(
     创建情侣头像拼图
     
     Args:
-        back_img: 底图
+        back_img: 原始back.png底图
         img_a: 第一张图片（左侧）
         img_b: 第二张图片（右侧）
         horizontal_spacing_ratio: 水平间距比例（相对于图片宽度）
@@ -84,10 +86,15 @@ def create_couple_puzzle(
     Returns:
         拼图结果（保持底图比例）
     """
+    # 先创建背景底图：将a、b图片无缝平接，从中间按3:4比例裁剪，添加磨玻璃效果，然后覆盖back.png
     back_width, back_height = back_img.size
+    target_size = (back_width, back_height)
     
-    # 计算图片的最大尺寸（使用底图的较小尺寸的40%，放大图片）
-    max_size = int(min(back_width, back_height) * 0.4)
+    # 创建背景底图
+    final_back_img = create_couple_background(img_a, img_b, back_img, target_size)
+    
+    # 计算图片的最大尺寸（使用底图的较小尺寸的45%，放大图片）
+    max_size = int(min(back_width, back_height) * 0.45)
     
     # 调整图片尺寸（保持1:1比例）
     if img_a.width != img_a.height:
@@ -113,8 +120,12 @@ def create_couple_puzzle(
     img_a_with_effects = add_shadow_and_rounded_corners(img_a)
     img_b_with_effects = add_shadow_and_rounded_corners(img_b)
     
-    # 创建底图副本（保持底图比例）
-    result_img = back_img.copy()
+    # 使用处理后的背景底图
+    result_img = final_back_img.copy()
+    
+    # 确保result_img是RGB模式
+    if result_img.mode != 'RGB':
+        result_img = result_img.convert('RGB')
     
     # 计算水平间距（相对于图片宽度）
     horizontal_spacing = int(max(img_a_with_effects.width, img_b_with_effects.width) * horizontal_spacing_ratio)
@@ -454,10 +465,9 @@ def main():
     # 打开底图
     try:
         back_img = Image.open(BACK_IMAGE)
-        # 确保底图是 RGB 模式
-        if back_img.mode != 'RGB':
-            back_img = back_img.convert('RGB')
-        logger.info(f"底图尺寸: {back_img.size[0]}x{back_img.size[1]}")
+        # 保持底图的原始模式（RGBA或RGB），不进行转换
+        # 因为back.png是透明图片，需要在create_couple_background中正确处理
+        logger.info(f"底图尺寸: {back_img.size[0]}x{back_img.size[1]}, 模式: {back_img.mode}")
     except Exception as e:
         logger.error(f"打开底图失败: {e}")
         sys.exit(1)
