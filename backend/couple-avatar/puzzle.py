@@ -15,14 +15,12 @@ from PIL import Image
 try:
     from .utils import (
         BACK_IMAGE, BACK1_IMAGE, add_shadow_and_rounded_corners, 
-        save_final_puzzle_image, create_circular_image, create_rounded_square_image,
-        create_couple_background, add_border
+        save_final_puzzle_image, create_circular_image, create_rounded_square_image
     )
 except ImportError:
     from utils import (
         BACK_IMAGE, BACK1_IMAGE, add_shadow_and_rounded_corners, 
-        save_final_puzzle_image, create_circular_image, create_rounded_square_image,
-        create_couple_background, add_border
+        save_final_puzzle_image, create_circular_image, create_rounded_square_image
     )
 
 # 配置日志
@@ -86,12 +84,19 @@ def create_couple_puzzle(
     Returns:
         拼图结果（保持底图比例）
     """
-    # 先创建背景底图：将a、b图片无缝平接，从中间按3:4比例裁剪，添加磨玻璃效果，然后覆盖back.png
+    # 直接使用back.png作为底图，去掉磨玻璃效果
     back_width, back_height = back_img.size
-    target_size = (back_width, back_height)
     
-    # 创建背景底图
-    final_back_img = create_couple_background(img_a, img_b, back_img, target_size)
+    # 确保back.png是RGB模式
+    if back_img.mode == 'RGBA':
+        # 如果有透明通道，转换为RGB（使用白色背景）
+        bg = Image.new('RGB', back_img.size, (255, 255, 255))
+        bg.paste(back_img, mask=back_img.split()[3])
+        final_back_img = bg
+    elif back_img.mode != 'RGB':
+        final_back_img = back_img.convert('RGB')
+    else:
+        final_back_img = back_img.copy()
     
     # 计算图片的最大尺寸（使用底图的较小尺寸的45%，放大图片）
     max_size = int(min(back_width, back_height) * 0.45)
@@ -324,13 +329,13 @@ def create_single_avatar_display(
     return canvas
 
 
-def process_single_avatars(work_dir: Path, back1_img: Image.Image) -> bool:
+def process_single_avatars(work_dir: Path, back_img: Image.Image) -> bool:
     """
     处理目录下的单个头像文件
     
     Args:
         work_dir: 工作目录
-        back1_img: back1底图
+        back_img: back.png底图
     
     Returns:
         是否成功
@@ -359,97 +364,49 @@ def process_single_avatars(work_dir: Path, back1_img: Image.Image) -> bool:
         logger.warning(f"  未找到任何头像文件")
         return False
     
-    logger.info(f"  找到 {len(a_files)} 个a图, {len(b_files)} 个b图, {len(other_files)} 个其他图片")
+    # 合并所有图片文件（不区分a、b，统一处理）
+    all_avatar_files = []
+    all_avatar_files.extend(a_files)
+    all_avatar_files.extend(b_files)
+    all_avatar_files.extend(other_files)
+    
+    if not all_avatar_files:
+        logger.warning(f"  未找到任何头像文件")
+        return False
+    
+    logger.info(f"  找到 {len(all_avatar_files)} 个头像文件")
     
     # 创建结果目录
     result_dir.mkdir(parents=True, exist_ok=True)
     
     success_count = 0
-    processed_pairs = set()  # 记录已处理的配对
-    
-    # 处理成对的a-b图片
-    for a_file in a_files:
-        # 查找对应的b文件
-        b_file_name = a_file.name.replace('-a.png', '-b.png')
-        b_file = work_dir / b_file_name
-        
-        if b_file.exists() and b_file in b_files:
-            # 成对处理
-            processed_pairs.add(a_file.name)
-            processed_pairs.add(b_file.name)
-            
-            try:
-                # 处理a图：方形用a图，圆形用b图，位置在右下角
-                a_img = Image.open(a_file)
-                b_img = Image.open(b_file)
-                
-                if a_img.mode not in ('RGB', 'RGBA'):
-                    a_img = a_img.convert('RGBA')
-                if b_img.mode not in ('RGB', 'RGBA'):
-                    b_img = b_img.convert('RGBA')
-                
-                # 创建a图的展示页面
-                display_img_a = create_single_avatar_display(
-                    a_img, back1_img, circle_img=b_img, circle_position='right'
-                )
-                output_name_a = a_file.stem + '.jpg'
-                output_file_a = result_dir / output_name_a
-                save_final_puzzle_image(display_img_a, output_file_a)
-                logger.info(f"  已处理: {a_file.name} -> {output_name_a} (方形:a, 圆形:b, 右下角)")
-                success_count += 1
-                
-                # 处理b图：方形用b图，圆形用a图，位置在左下角
-                display_img_b = create_single_avatar_display(
-                    b_img, back1_img, circle_img=a_img, circle_position='left'
-                )
-                output_name_b = b_file.stem + '.jpg'
-                output_file_b = result_dir / output_name_b
-                save_final_puzzle_image(display_img_b, output_file_b)
-                logger.info(f"  已处理: {b_file.name} -> {output_name_b} (方形:b, 圆形:a, 左下角)")
-                success_count += 1
-                
-            except Exception as e:
-                logger.error(f"  处理头像配对失败 {a_file.name} + {b_file.name}: {e}")
-    
-    # 处理单独的b文件（没有对应a文件的）
-    for b_file in b_files:
-        if b_file.name not in processed_pairs:
-            try:
-                b_img = Image.open(b_file)
-                if b_img.mode not in ('RGB', 'RGBA'):
-                    b_img = b_img.convert('RGBA')
-                
-                # 保持原有逻辑：方形和圆形都用b图
-                display_img = create_single_avatar_display(b_img, back1_img)
-                output_name = b_file.stem + '.jpg'
-                output_file = result_dir / output_name
-                save_final_puzzle_image(display_img, output_file)
-                logger.info(f"  已处理: {b_file.name} -> {output_name} (单独文件)")
-                success_count += 1
-                
-            except Exception as e:
-                logger.error(f"  处理头像文件失败 {b_file.name}: {e}")
-    
-    # 处理其他非成对的图片文件
-    for other_file in other_files:
+    # 统一处理所有头像文件，不区分a、b，只做单图处理，圆形图片都放在右下角
+    for avatar_file in sorted(all_avatar_files):
         try:
-            other_img = Image.open(other_file)
-            if other_img.mode not in ('RGB', 'RGBA'):
-                other_img = other_img.convert('RGBA')
+            # 打开头像图片
+            avatar_img = Image.open(avatar_file)
             
-            # 保持原有逻辑：方形和圆形都用同一张图
-            display_img = create_single_avatar_display(other_img, back1_img)
-            output_name = other_file.stem + '.jpg'
+            # 确保图片是 RGB 或 RGBA 模式
+            if avatar_img.mode not in ('RGB', 'RGBA'):
+                avatar_img = avatar_img.convert('RGBA')
+            
+            # 创建展示页面：方形和圆形都用同一张图，圆形图片放在右下角
+            display_img = create_single_avatar_display(avatar_img, back_img, circle_position='right')
+            
+            # 生成输出文件名（使用原文件名，改为.jpg）
+            output_name = avatar_file.stem + '.jpg'
             output_file = result_dir / output_name
+            
+            # 保存结果（压缩到300KB以下）
             save_final_puzzle_image(display_img, output_file)
-            logger.info(f"  已处理: {other_file.name} -> {output_name} (单独文件)")
+            
+            logger.info(f"  已处理: {avatar_file.name} -> {output_name}")
             success_count += 1
             
         except Exception as e:
-            logger.error(f"  处理头像文件失败 {other_file.name}: {e}")
+            logger.error(f"  处理头像文件失败 {avatar_file.name}: {e}")
     
-    total_files = len(a_files) + len(b_files) + len(other_files)
-    logger.info(f"  处理完成: {success_count}/{total_files} 个头像成功")
+    logger.info(f"  处理完成: {success_count}/{len(all_avatar_files)} 个头像成功")
     return success_count > 0
 
 
@@ -466,24 +423,11 @@ def main():
     try:
         back_img = Image.open(BACK_IMAGE)
         # 保持底图的原始模式（RGBA或RGB），不进行转换
-        # 因为back.png是透明图片，需要在create_couple_background中正确处理
+        # 因为back.png是透明图片，需要在create_couple_puzzle中正确处理
         logger.info(f"底图尺寸: {back_img.size[0]}x{back_img.size[1]}, 模式: {back_img.mode}")
     except Exception as e:
         logger.error(f"打开底图失败: {e}")
         sys.exit(1)
-    
-    # 检查back1底图是否存在（用于单个头像处理）
-    back1_img = None
-    if BACK1_IMAGE.exists():
-        try:
-            back1_img = Image.open(BACK1_IMAGE)
-            if back1_img.mode != 'RGB':
-                back1_img = back1_img.convert('RGB')
-            logger.info(f"back1底图尺寸: {back1_img.size[0]}x{back1_img.size[1]}")
-        except Exception as e:
-            logger.warning(f"打开back1底图失败: {e}，将跳过单个头像处理")
-    else:
-        logger.warning(f"back1底图不存在: {BACK1_IMAGE}，将跳过单个头像处理")
     
     # 检查 imgs 目录
     if not IMGS_DIR.exists():
@@ -513,20 +457,19 @@ def main():
     
     logger.info(f"情侣头像拼图处理完成: {success_count}/{len(subdirs)} 个目录成功")
     
-    # 处理单个头像展示
-    if back1_img:
-        logger.info("=" * 50)
-        logger.info("处理单个头像展示")
-        logger.info("=" * 50)
-        single_success_count = 0
-        for subdir in subdirs:
-            try:
-                if process_single_avatars(subdir, back1_img):
-                    single_success_count += 1
-            except Exception as e:
-                logger.error(f"处理单个头像 {subdir.name} 时发生错误: {e}")
-        
-        logger.info(f"单个头像展示处理完成: {single_success_count}/{len(subdirs)} 个目录成功")
+    # 处理单个头像展示（使用back.png作为底图）
+    logger.info("=" * 50)
+    logger.info("处理单个头像展示")
+    logger.info("=" * 50)
+    single_success_count = 0
+    for subdir in subdirs:
+        try:
+            if process_single_avatars(subdir, back_img):
+                single_success_count += 1
+        except Exception as e:
+            logger.error(f"处理单个头像 {subdir.name} 时发生错误: {e}")
+    
+    logger.info(f"单个头像展示处理完成: {single_success_count}/{len(subdirs)} 个目录成功")
 
 
 if __name__ == '__main__':
