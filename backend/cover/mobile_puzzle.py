@@ -78,23 +78,27 @@ def crop_to_ratio_center_height(image: Image.Image, target_ratio: float) -> Imag
     return image.crop((crop_left, 0, crop_right, image.height))
 
 
-def prepare_mobile_desktop(work_dir: Path) -> bool:
+def prepare_mobile_desktop(work_dir: Path, source_dir: Path = None) -> bool:
     """
     准备 Mobile desktop 图片
 
     Args:
-        work_dir: 工作目录
+        work_dir: 工作目录（中间文件输出目录）
+        source_dir: 源图片目录，默认与 work_dir 相同
 
     Returns:
         是否成功
     """
+    if source_dir is None:
+        source_dir = work_dir
+
     mobile_desktop = work_dir / 'mobile-desktop.png'
     if mobile_desktop.exists():
         logger.info(f"  mobile-desktop.png 已存在，跳过")
         return True
 
-    mobile = work_dir / 'mobile.png'
-    if not mobile.exists():
+    mobile = get_image_file(source_dir, 'mobile')
+    if not mobile:
         logger.error(f"  缺少 mobile.png")
         return False
 
@@ -105,7 +109,7 @@ def prepare_mobile_desktop(work_dir: Path) -> bool:
     try:
         base_img = Image.open(mobile)
         cover_img = Image.open(MOBILE_BLOCK_COVER)
-        
+
         # 确保两张图片都是 9:19 比例
         base_ratio = base_img.width / base_img.height
         cover_ratio = cover_img.width / cover_img.height
@@ -133,20 +137,24 @@ def prepare_mobile_desktop(work_dir: Path) -> bool:
         logger.error(f"  生成 mobile-desktop.png 失败: {e}")
         return False
 
-def create_mobile_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str] = None) -> bool:
+def create_mobile_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str] = None, source_dir: Path = None) -> bool:
     """
     创建 Mobile 拼图
     两张图片居中水平排列，单个图片占总页面高度的70%
 
     Args:
-        work_dir: 工作目录
+        work_dir: 工作目录（中间文件所在目录）
         output_dir: 输出目录
         main_color: 主色调
-    
+        source_dir: 源图片目录，默认与 work_dir 相同
+
     Returns:
         是否成功
     """
-    mobile_lock_file = get_image_file(work_dir, 'mobile-lock')
+    if source_dir is None:
+        source_dir = work_dir
+
+    mobile_lock_file = get_image_file(source_dir, 'mobile-lock')
     mobile_desktop_file = work_dir / 'mobile-desktop.png'
 
     if not mobile_lock_file or not mobile_desktop_file.exists():
@@ -219,12 +227,11 @@ def create_mobile_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[
         bg = create_background((canvas_width, canvas_height), main_color, original_mobile_lock)
 
         # 获取原始 mobile.png 图片尺寸
-        mobile_file = get_image_file(work_dir, 'mobile')
+        mobile_file = get_image_file(source_dir, 'mobile')
         if mobile_file:
             original_mobile = Image.open(mobile_file)
             original_width, original_height = original_mobile.size
         else:
-            # 如果没有找到 mobile.png，使用 mobile-lock 的尺寸
             original_width, original_height = original_mobile_lock.size
 
         # 计算居中位置（水平居中，垂直居中）
@@ -237,7 +244,7 @@ def create_mobile_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[
 
         # 添加尺寸水印（使用原始 mobile.png 的尺寸）
         bg = add_size_watermark(bg, original_width, original_height)
-        
+
         # 保存并优化文件大小（统一压缩到200-300KB）
         output_file = output_dir / 'mobile-combined.jpg'
         save_final_puzzle_image(bg, output_file)
@@ -249,24 +256,28 @@ def create_mobile_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[
         return False
 
 
-def prepare_mobile_desktop_2(work_dir: Path) -> bool:
+def prepare_mobile_desktop_2(work_dir: Path, source_dir: Path = None) -> bool:
     """
     准备 Mobile desktop-2 图片
     将 mobile.png 整张图做磨玻璃模糊效果，再使用 mobile-block-cover.png 图片生成 mobile-desktop-2.png
 
     Args:
-        work_dir: 工作目录
+        work_dir: 工作目录（中间文件输出目录）
+        source_dir: 源图片目录，默认与 work_dir 相同
 
     Returns:
         是否成功
     """
+    if source_dir is None:
+        source_dir = work_dir
+
     mobile_desktop_2 = work_dir / 'mobile-desktop-2.png'
     if mobile_desktop_2.exists():
         logger.info(f"  mobile-desktop-2.png 已存在，跳过")
         return True
 
-    mobile = work_dir / 'mobile.png'
-    if not mobile.exists():
+    mobile = get_image_file(source_dir, 'mobile')
+    if not mobile:
         logger.error(f"  缺少 mobile.png")
         return False
 
@@ -310,21 +321,25 @@ def prepare_mobile_desktop_2(work_dir: Path) -> bool:
         return False
 
 
-def create_mobile_puzzle_2(work_dir: Path, output_dir: Path, main_color: Optional[str] = None) -> bool:
+def create_mobile_puzzle_2(work_dir: Path, output_dir: Path, main_color: Optional[str] = None, source_dir: Path = None) -> bool:
     """
     创建 Mobile 拼图-2
     两张图片居中水平排列，单个图片占总页面高度的70%
     使用 mobile-lock.jpg 和 mobile-desktop-2.png 拼接生成 mobile-combined-2.jpg
 
     Args:
-        work_dir: 工作目录
+        work_dir: 工作目录（中间文件所在目录）
         output_dir: 输出目录
         main_color: 主色调
-    
+        source_dir: 源图片目录，默认与 work_dir 相同
+
     Returns:
         是否成功
     """
-    mobile_lock_file = get_image_file(work_dir, 'mobile-lock')
+    if source_dir is None:
+        source_dir = work_dir
+
+    mobile_lock_file = get_image_file(source_dir, 'mobile-lock')
     mobile_desktop_2_file = work_dir / 'mobile-desktop-2.png'
 
     if not mobile_lock_file or not mobile_desktop_2_file.exists():
@@ -397,12 +412,11 @@ def create_mobile_puzzle_2(work_dir: Path, output_dir: Path, main_color: Optiona
         bg = create_background((canvas_width, canvas_height), main_color, original_mobile_lock)
 
         # 获取原始 mobile.png 图片尺寸
-        mobile_file = get_image_file(work_dir, 'mobile')
+        mobile_file = get_image_file(source_dir, 'mobile')
         if mobile_file:
             original_mobile = Image.open(mobile_file)
             original_width, original_height = original_mobile.size
         else:
-            # 如果没有找到 mobile.png，使用 mobile-lock 的尺寸
             original_width, original_height = original_mobile_lock.size
 
         # 计算居中位置（水平居中，垂直居中）
@@ -415,7 +429,7 @@ def create_mobile_puzzle_2(work_dir: Path, output_dir: Path, main_color: Optiona
 
         # 添加尺寸水印（使用原始 mobile.png 的尺寸）
         bg = add_size_watermark(bg, original_width, original_height)
-        
+
         # 保存并优化文件大小（统一压缩到200-300KB）
         output_file = output_dir / 'mobile-combined-2.jpg'
         save_final_puzzle_image(bg, output_file)
@@ -426,24 +440,28 @@ def create_mobile_puzzle_2(work_dir: Path, output_dir: Path, main_color: Optiona
         return False
 
 
-def prepare_mobile_desktop_3(work_dir: Path) -> bool:
+def prepare_mobile_desktop_3(work_dir: Path, source_dir: Path = None) -> bool:
     """
     准备 Mobile desktop-3 图片
     如果存在 mobile-2.png，则参照 mobile.png 的磨玻璃处理效果进行处理
     将 mobile-2.png 整张图做磨玻璃模糊效果，再使用 mobile-block-cover.png 图片生成 mobile-desktop-3.png
 
     Args:
-        work_dir: 工作目录
+        work_dir: 工作目录（中间文件输出目录）
+        source_dir: 源图片目录，默认与 work_dir 相同
 
     Returns:
         是否成功
     """
+    if source_dir is None:
+        source_dir = work_dir
+
     mobile_desktop_3 = work_dir / 'mobile-desktop-3.png'
     if mobile_desktop_3.exists():
         logger.info(f"  mobile-desktop-3.png 已存在，跳过")
         return True
 
-    mobile_2 = get_image_file(work_dir, 'mobile-2')
+    mobile_2 = get_image_file(source_dir, 'mobile-2')
     if not mobile_2:
         logger.info(f"  未找到 mobile-2.png，跳过 mobile-desktop-3.png 生成")
         return True
@@ -490,21 +508,25 @@ def prepare_mobile_desktop_3(work_dir: Path) -> bool:
         return False
 
 
-def create_mobile_puzzle_3(work_dir: Path, output_dir: Path, main_color: Optional[str] = None) -> bool:
+def create_mobile_puzzle_3(work_dir: Path, output_dir: Path, main_color: Optional[str] = None, source_dir: Path = None) -> bool:
     """
     创建 Mobile 拼图-3
     两张图片居中水平排列，单个图片占总页面高度的70%
     使用 mobile-lock.jpg 和 mobile-desktop-3.png 拼接生成 mobile-combined-3.jpg
 
     Args:
-        work_dir: 工作目录
+        work_dir: 工作目录（中间文件所在目录）
         output_dir: 输出目录
         main_color: 主色调
-    
+        source_dir: 源图片目录，默认与 work_dir 相同
+
     Returns:
         是否成功
     """
-    mobile_lock_file = get_image_file(work_dir, 'mobile-lock')
+    if source_dir is None:
+        source_dir = work_dir
+
+    mobile_lock_file = get_image_file(source_dir, 'mobile-lock')
     mobile_desktop_3_file = work_dir / 'mobile-desktop-3.png'
 
     if not mobile_lock_file or not mobile_desktop_3_file.exists():
@@ -577,12 +599,11 @@ def create_mobile_puzzle_3(work_dir: Path, output_dir: Path, main_color: Optiona
         bg = create_background((canvas_width, canvas_height), main_color, original_mobile_lock)
 
         # 获取原始 mobile.png 图片尺寸
-        mobile_file = get_image_file(work_dir, 'mobile')
+        mobile_file = get_image_file(source_dir, 'mobile')
         if mobile_file:
             original_mobile = Image.open(mobile_file)
             original_width, original_height = original_mobile.size
         else:
-            # 如果没有找到 mobile.png，使用 mobile-lock 的尺寸
             original_width, original_height = original_mobile_lock.size
 
         # 计算居中位置（水平居中，垂直居中）
@@ -595,7 +616,7 @@ def create_mobile_puzzle_3(work_dir: Path, output_dir: Path, main_color: Optiona
 
         # 添加尺寸水印（使用原始 mobile.png 的尺寸）
         bg = add_size_watermark(bg, original_width, original_height)
-        
+
         # 保存并优化文件大小（统一压缩到200-300KB）
         output_file = output_dir / 'mobile-combined-3.jpg'
         save_final_puzzle_image(bg, output_file)
@@ -603,5 +624,145 @@ def create_mobile_puzzle_3(work_dir: Path, output_dir: Path, main_color: Optiona
         return True
     except Exception as e:
         logger.error(f"  生成 Mobile 拼图-3 失败: {e}")
+        return False
+
+
+def prepare_desktop_from_file(
+    source_file: Path,
+    output_file: Path,
+    cover_file: Path = None,
+    target_ratio: float = 9 / 19
+) -> bool:
+    """
+    通用：将 source 图片与 cover 图叠加，生成 desktop 图片。
+    复用 prepare_mobile_desktop 的核心叠加逻辑，支持任意文件名。
+
+    Args:
+        source_file: 底图文件路径（如 1.png）
+        output_file: 输出文件路径（如 1-desktop.png）
+        cover_file: 覆盖图路径，默认使用 mobile-block-cover.png
+        target_ratio: 目标宽高比，默认 9:19
+
+    Returns:
+        是否成功
+    """
+    if cover_file is None:
+        cover_file = MOBILE_BLOCK_COVER
+
+    if output_file.exists():
+        logger.info(f"  {output_file.name} 已存在，跳过")
+        return True
+
+    if not cover_file.exists():
+        logger.error(f"  缺少覆盖图片: {cover_file}")
+        return False
+
+    try:
+        base_img = Image.open(source_file)
+        cover_img = Image.open(cover_file)
+
+        base_ratio = base_img.width / base_img.height
+        if abs(base_ratio - target_ratio) > 0.01:
+            base_img = crop_to_ratio_center_height(base_img, target_ratio)
+
+        cover_ratio = cover_img.width / cover_img.height
+        if abs(cover_ratio - target_ratio) > 0.01:
+            new_height = cover_img.height
+            new_width = int(new_height * target_ratio)
+            cover_img = cover_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+        if base_img.size != cover_img.size:
+            cover_img = cover_img.resize(base_img.size, Image.Resampling.LANCZOS)
+
+        result = overlay_images(base_img, cover_img)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        result.save(str(output_file), 'PNG')
+        logger.info(f"  已生成 {output_file.name}")
+        return True
+    except Exception as e:
+        logger.error(f"  生成 {output_file.name} 失败: {e}")
+        return False
+
+
+def create_horizontal_pair_puzzle(
+    file_a: Path,
+    file_b: Path,
+    output_file: Path,
+    target_input_ratio: float = 9 / 19,
+    main_color: Optional[str] = None,
+    watermark_source: Optional[Path] = None
+) -> bool:
+    """
+    通用：将两张相同比例的图片横向居中排列，生成拼图结果。
+    复用 create_mobile_puzzle 的核心拼图逻辑，支持任意文件名。
+
+    Args:
+        file_a: 左侧图片（如 {name}-lock.*）
+        file_b: 右侧图片（如 {name}-desktop.png）
+        output_file: 输出文件路径（如 {name}-combined.jpg）
+        target_input_ratio: 输入图片目标比例，默认 9:19
+        main_color: 背景主色调
+        watermark_source: 用于尺寸水印的原始图片，默认使用 file_a
+
+    Returns:
+        是否成功
+    """
+    try:
+        img_a = Image.open(file_a)
+        img_b = Image.open(file_b)
+
+        img_a = resize_to_fit_ratio(img_a, target_input_ratio, (2000, 4000))
+        img_b = resize_to_fit_ratio(img_b, target_input_ratio, (2000, 4000))
+
+        base_height = 2000
+        canvas_width = int(base_height * (OUTPUT_RATIO[0] / OUTPUT_RATIO[1]))
+        canvas_height = base_height
+
+        target_content_height = int(canvas_height * 0.7)
+        target_content_width = int(target_content_height * target_input_ratio)
+
+        img_a = img_a.resize((target_content_width, target_content_height), Image.Resampling.LANCZOS)
+        img_b = img_b.resize((target_content_width, target_content_height), Image.Resampling.LANCZOS)
+
+        img_a = add_shadow_and_rounded_corners(img_a)
+        img_b = add_shadow_and_rounded_corners(img_b)
+
+        total_content_width = img_a.width + img_b.width + SPACING
+
+        if total_content_width > canvas_width:
+            max_scale = (canvas_width - SPACING) / (2 * target_content_width)
+            if max_scale < 1.0:
+                new_w = int(target_content_width * max_scale)
+                new_h = int(target_content_height * max_scale)
+                img_a = Image.open(file_a)
+                img_b = Image.open(file_b)
+                img_a = resize_to_fit_ratio(img_a, target_input_ratio, (2000, 4000))
+                img_b = resize_to_fit_ratio(img_b, target_input_ratio, (2000, 4000))
+                img_a = img_a.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                img_b = img_b.resize((new_w, new_h), Image.Resampling.LANCZOS)
+                img_a = add_shadow_and_rounded_corners(img_a)
+                img_b = add_shadow_and_rounded_corners(img_b)
+                total_content_width = img_a.width + img_b.width + SPACING
+
+        src_for_bg = Image.open(watermark_source if watermark_source else file_a)
+        bg = create_background((canvas_width, canvas_height), main_color, src_for_bg)
+
+        original = Image.open(watermark_source if watermark_source else file_a)
+        orig_w, orig_h = original.size
+
+        x_offset = (canvas_width - total_content_width) // 2
+        y_offset = (canvas_height - max(img_a.height, img_b.height)) // 2
+
+        bg.paste(img_a, (x_offset, y_offset), img_a)
+        bg.paste(img_b, (x_offset + img_a.width + SPACING, y_offset), img_b)
+
+        bg = add_size_watermark(bg, orig_w, orig_h)
+
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        save_final_puzzle_image(bg, output_file)
+        logger.info(f"  已生成 {output_file.name}")
+        return True
+    except Exception as e:
+        logger.error(f"  生成拼图 {output_file.name} 失败: {e}")
         return False
 

@@ -45,17 +45,21 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def prepare_pad_images(work_dir: Path) -> bool:
+def prepare_pad_images(work_dir: Path, source_dir: Path = None) -> bool:
     """
     准备 Pad desktop 和 lock 图片
-    
+
     Args:
-        work_dir: 工作目录
-    
+        work_dir: 工作目录（中间文件输出目录）
+        source_dir: 源图片目录，默认与 work_dir 相同
+
     Returns:
         是否成功
     """
-    pad = get_image_file(work_dir, 'pad')
+    if source_dir is None:
+        source_dir = work_dir
+
+    pad = get_image_file(source_dir, 'pad')
     if not pad:
         logger.info(f"  未找到 pad.png，跳过 Pad 图片预处理")
         return True
@@ -146,20 +150,24 @@ def prepare_pad_images(work_dir: Path) -> bool:
     return success
 
 
-def create_pad_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str] = None) -> bool:
+def create_pad_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str] = None, source_dir: Path = None) -> bool:
     """
     创建 Pad 拼图
     要求：单个图片宽度占整体图片的70%，高度不超过40%，两张图片纵向拼接，图片间有间隙
-    
+
     Args:
-        work_dir: 工作目录
+        work_dir: 工作目录（中间文件所在目录）
         output_dir: 输出目录
         main_color: 主色调
-    
+        source_dir: 源图片目录，默认与 work_dir 相同
+
     Returns:
         是否成功
     """
-    pad_file = get_image_file(work_dir, 'pad')
+    if source_dir is None:
+        source_dir = work_dir
+
+    pad_file = get_image_file(source_dir, 'pad')
 
     # 如果不存在 pad.png，跳过 Pad 壁纸拼接
     if not pad_file:
@@ -279,7 +287,7 @@ def create_pad_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str
         # main_color = "#ffffff": 使用纯色背景
         bg = create_background((canvas_width, canvas_height), main_color, source_img)
 
-        # 获取原始 pad.png 图片尺寸
+        # 获取原始 pad.png 图片尺寸（pad_file 来自 source_dir）
         original_pad = Image.open(pad_file)
         original_width, original_height = original_pad.size
 

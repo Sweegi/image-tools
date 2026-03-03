@@ -86,12 +86,7 @@ setup: install
 	@$(VENV_PIP) install Pillow numpy scikit-learn
 	@echo "依赖安装完成"
 
-run: setup
-	@echo "执行拼图脚本..."
-	@if [ ! -f "$(VENV_PYTHON)" ] || [ ! -f "$(VENV_PIP)" ]; then \
-		echo "错误: 虚拟环境不完整，请先运行 make install"; \
-		exit 1; \
-	fi
+run:
 	@$(VENV_PYTHON) puzzle.py $(ARGS)
 
 clean:

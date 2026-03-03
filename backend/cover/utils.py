@@ -16,14 +16,14 @@ import platform
 logger = logging.getLogger(__name__)
 
 # 常量定义
-BACK_IMAGE = Path(__file__).parent / 'back.jpg'
+BACK_IMAGE = Path(__file__).parent / 'back.png'
 MOBILE_BLOCK_COVER = Path(__file__).parent / 'mobile-block-cover.png'
 PAD_BLOCK_COVER = Path(__file__).parent / 'pad-block-cover.png'
 PAD_LOCK_COVER = Path(__file__).parent / 'pad-lock-cover.png'
 PC_MAC_COVER = Path(__file__).parent / 'pc-mac-cover.png'
 
 # 输出图片配置
-OUTPUT_RATIO = (1, 1)  # 1:1 比例
+OUTPUT_RATIO = (3, 4)  # 3:4 比例
 MAX_FILE_SIZE = 2 * 1024 * 1024  # 2MB
 MAX_JPEG_SIZE = 500 * 1024  # 500KB（用于最终输出的 JPG 文件）
 FINAL_PUZZLE_MIN_SIZE = 200 * 1024  # 200KB（最终拼图结果最小大小）

@@ -47,22 +47,26 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
-def prepare_pc_desktop_mac(work_dir: Path) -> bool:
+def prepare_pc_desktop_mac(work_dir: Path, source_dir: Path = None) -> bool:
     """
     准备 PC desktop mac 图片
 
     Args:
-        work_dir: 工作目录
+        work_dir: 工作目录（中间文件输出目录）
+        source_dir: 源图片目录，默认与 work_dir 相同
 
     Returns:
         是否成功
     """
+    if source_dir is None:
+        source_dir = work_dir
+
     pc_desktop_mac = work_dir / 'pc-desktop-mac.png'
     if pc_desktop_mac.exists():
         logger.info(f"  pc-desktop-mac.png 已存在，跳过")
         return True
 
-    pc = get_image_file(work_dir, 'pc')
+    pc = get_image_file(source_dir, 'pc')
     if not pc:
         logger.info(f"  未找到 pc.png，跳过 pc-desktop-mac.png 生成")
         return True
@@ -104,7 +108,7 @@ def prepare_pc_desktop_mac(work_dir: Path) -> bool:
         logger.error(f"  生成 pc-desktop-mac.png 失败: {e}")
         return False
 
-def create_pc_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str] = None) -> bool:
+def create_pc_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str] = None, source_dir: Path = None) -> bool:
     """
     创建 PC 拼图
     要求：
@@ -112,14 +116,18 @@ def create_pc_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str]
     - 单个图片宽度占整体图片的80%，高度占40%，两张图片之间保留间隔
 
     Args:
-        work_dir: 工作目录
+        work_dir: 工作目录（中间文件所在目录）
         output_dir: 输出目录
         main_color: 主色调
+        source_dir: 源图片目录，默认与 work_dir 相同
 
     Returns:
         是否成功
     """
-    pc_file = get_image_file(work_dir, 'pc')
+    if source_dir is None:
+        source_dir = work_dir
+
+    pc_file = get_image_file(source_dir, 'pc')
 
     # 如果不存在 pc.png，跳过 PC 壁纸拼接
     if not pc_file:
@@ -147,7 +155,7 @@ def create_pc_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str]
         # 使用 pc.png 和 pc-desktop-mac.png 进行拼图
         # 宽度占80%
         width_ratio = 0.8
-        
+
         if pc_file:
             image_files.append(('pc', pc_file))
             if source_img is None:
@@ -237,7 +245,7 @@ def create_pc_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[str]
         # main_color = "#ffffff": 使用纯色背景
         bg = create_background((canvas_width, canvas_height), main_color, source_img)
 
-        # 获取原始 pc.png 图片尺寸
+        # 获取原始 pc.png 图片尺寸（pc_file 来自 source_dir）
         original_pc = Image.open(pc_file)
         original_width, original_height = original_pc.size
 
