@@ -603,8 +603,8 @@ def add_size_watermark(image: Image.Image, original_width: int, original_height:
     # 获取最终图片尺寸（用于计算位置）
     width, height = image.size
     
-    # 生成文字：图片尺寸：宽度x高度
-    size_text = f"图片尺寸：{original_width}x{original_height}"
+    # 水印使用英文，避免无中文字体时乱码
+    size_text = f"Size: {original_width}x{original_height}"
     
     # 计算字体大小（根据图片高度）
     if font_size is None:
@@ -612,120 +612,23 @@ def add_size_watermark(image: Image.Image, original_width: int, original_height:
     
     # 创建图片副本
     result_img = image.copy()
-    
-    # 创建绘图对象
     draw = ImageDraw.Draw(result_img)
-    
-    # 尝试加载支持中文的字体
+
+    # 水印为英文，使用常见英文字体避免乱码
     font = None
-    font_path = get_font_path()
-    if font_path:
+    for name in ['DejaVuSans.ttf', 'arial.ttf', 'Arial.ttf']:
         try:
-            font = ImageFont.truetype(font_path, font_size)
-            logger.debug(f"成功加载中文字体: {font_path}")
-        except Exception as e:
-            logger.debug(f"加载字体失败 {font_path}: {e}")
-            font = None
-    
-    # 如果字体加载失败，尝试使用 fontconfig 查找字体（如果可用）
+            font = ImageFont.truetype(name, font_size)
+            break
+        except Exception:
+            continue
     if font is None:
-        try:
-            import subprocess
-            result = subprocess.run(
-                ['fc-match', '-f', '%{file}', ':lang=zh'],
-                capture_output=True,
-                text=True,
-                timeout=2,
-                stderr=subprocess.DEVNULL
-            )
-            if result.returncode == 0 and result.stdout.strip():
-                font_file = result.stdout.strip()
-                if Path(font_file).exists():
-                    try:
-                        font = ImageFont.truetype(font_file, font_size)
-                        logger.debug(f"通过 fontconfig 加载中文字体: {font_file}")
-                    except Exception as e:
-                        logger.debug(f"通过 fontconfig 加载字体失败: {e}")
-        except FileNotFoundError:
-            # fontconfig 未安装，跳过
-            pass
-        except Exception as e:
-            logger.debug(f"使用 fontconfig 查找字体时出错: {e}")
-    
-    # 如果仍然没有找到支持中文的字体，尝试查找系统中任何可能的中文字体
-    if font is None:
-        # 尝试查找常见的中文字体目录
-        common_font_dirs = [
-            '/usr/share/fonts',
-            '/usr/local/share/fonts',
-            '~/.fonts',
-            '~/.local/share/fonts',
-        ]
-        
-        for font_dir in common_font_dirs:
-            font_dir_path = Path(font_dir).expanduser()
-            if font_dir_path.exists():
-                # 查找可能的中文字体文件
-                for pattern in ['*.ttc', '*.ttf', '*.otf']:
-                    for font_file in font_dir_path.rglob(pattern):
-                        try:
-                            # 尝试加载字体
-                            test_font = ImageFont.truetype(str(font_file), font_size)
-                            # 简单测试：检查字体是否支持中文（通过检查字体名称或尝试渲染）
-                            font = test_font
-                            logger.info(f"找到并使用中文字体: {font_file}")
-                            break
-                        except Exception:
-                            continue
-                    if font is not None:
-                        break
-                if font is not None:
-                    break
-    
-    # 如果仍然没有找到支持中文的字体，尝试使用默认字体并给出警告
-    if font is None:
-        logger.warning("未找到支持中文的字体，'图片尺寸'四个字可能显示为乱码。")
-        logger.warning("建议安装中文字体，例如：")
-        logger.warning("  Ubuntu/Debian: sudo apt-get install fonts-wqy-microhei")
-        logger.warning("  或者: sudo apt-get install fonts-noto-cjk")
-        
-        # 尝试使用默认字体（虽然不支持中文，但至少不会崩溃）
-        try:
-            font = ImageFont.truetype("arial.ttf", font_size)
-        except:
-            try:
-                font = ImageFont.truetype("DejaVuSans.ttf", font_size)
-            except:
-                # 使用默认字体，但需要处理中文编码问题
-                font = ImageFont.load_default()
-                # 如果使用默认字体，将中文替换为英文
-                size_text = f"Size: {original_width}x{original_height}"
-                logger.warning("使用默认字体，将中文替换为英文以避免乱码")
-    
-    # 获取文字尺寸（处理可能的编码错误）
-    try:
-        bbox = draw.textbbox((0, 0), size_text, font=font)
-        text_width = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
-    except (UnicodeEncodeError, UnicodeError):
-        # 如果出现编码错误，使用英文替代
-        size_text = f"Size: {original_width}x{original_height}"
-        logger.warning("字体不支持中文，使用英文替代")
-        bbox = draw.textbbox((0, 0), size_text, font=font)
-        text_width = bbox[2] - bbox[0]
-        text_height = bbox[3] - bbox[1]
-    
-    # 计算文字位置：水平居中，距离底部3%
+        font = ImageFont.load_default()
+
+    bbox = draw.textbbox((0, 0), size_text, font=font)
+    text_width = bbox[2] - bbox[0]
+    text_height = bbox[3] - bbox[1]
     x = (width - text_width) // 2
-    y = int(height * 0.97) - text_height  # 距离底部3%
-    
-    # 绘制文字（黑色）
-    try:
-        draw.text((x, y), size_text, fill=(0, 0, 0), font=font)
-    except (UnicodeEncodeError, UnicodeError):
-        # 如果绘制时出现编码错误，使用英文替代
-        size_text = f"Size: {original_width}x{original_height}"
-        logger.warning("绘制文字时出现编码错误，使用英文替代")
-        draw.text((x, y), size_text, fill=(0, 0, 0), font=font)
-    
+    y = int(height * 0.97) - text_height
+    draw.text((x, y), size_text, fill=(0, 0, 0), font=font)
     return result_img

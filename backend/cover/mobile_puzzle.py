@@ -193,20 +193,14 @@ def create_mobile_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[
         # 计算两张图片（带阴影）的总宽度和间距
         total_content_width = mobile_lock.width + mobile_desktop.width + SPACING
 
-        # 如果总宽度超过画布，需要按比例缩小，但保持图片内容高度占70%的比例
-        # 计算缩放比例，确保两张图片内容宽度之和 + 间距不超过画布
-        max_total_width = canvas_width
+        # 左右各留 5% 边距，两张图片 + 间距不超过 90% 画布宽度
+        max_total_width = int(canvas_width * 0.90)
         if total_content_width > max_total_width:
-            # 计算需要缩小的比例
-            # 目标：2 * target_content_width * scale + SPACING <= max_total_width
-            # 所以：scale <= (max_total_width - SPACING) / (2 * target_content_width)
             max_scale = (max_total_width - SPACING) / (2 * target_content_width)
             if max_scale < 1.0:
-                # 需要缩小（保持高度占70%的比例）
                 new_target_content_width = int(target_content_width * max_scale)
                 new_target_content_height = int(target_content_height * max_scale)
 
-                # 重新调整图片尺寸
                 mobile_lock = Image.open(mobile_lock_file)
                 mobile_desktop = Image.open(mobile_desktop_file)
                 mobile_lock = resize_to_fit_ratio(mobile_lock, target_input_ratio, (2000, 4000))
@@ -214,19 +208,13 @@ def create_mobile_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[
                 mobile_lock = mobile_lock.resize((new_target_content_width, new_target_content_height), Image.Resampling.LANCZOS)
                 mobile_desktop = mobile_desktop.resize((new_target_content_width, new_target_content_height), Image.Resampling.LANCZOS)
 
-                # 重新添加阴影和圆角
                 mobile_lock = add_shadow_and_rounded_corners(mobile_lock)
                 mobile_desktop = add_shadow_and_rounded_corners(mobile_desktop)
                 total_content_width = mobile_lock.width + mobile_desktop.width + SPACING
 
-        # 创建背景
-        # main_color = None: 使用默认背景（back.jpg）
-        # main_color = "": 自动提取主色调
-        # main_color = "#ffffff": 使用纯色背景
         original_mobile_lock = Image.open(mobile_lock_file)
         bg = create_background((canvas_width, canvas_height), main_color, original_mobile_lock)
 
-        # 获取原始 mobile.png 图片尺寸
         mobile_file = get_image_file(source_dir, 'mobile')
         if mobile_file:
             original_mobile = Image.open(mobile_file)
@@ -234,18 +222,14 @@ def create_mobile_puzzle(work_dir: Path, output_dir: Path, main_color: Optional[
         else:
             original_width, original_height = original_mobile_lock.size
 
-        # 计算居中位置（水平居中，垂直居中）
         x_offset = (canvas_width - total_content_width) // 2
         y_offset = (canvas_height - max(mobile_lock.height, mobile_desktop.height)) // 2
 
-        # 粘贴图片
         bg.paste(mobile_lock, (x_offset, y_offset), mobile_lock)
         bg.paste(mobile_desktop, (x_offset + mobile_lock.width + SPACING, y_offset), mobile_desktop)
 
-        # 添加尺寸水印（使用原始 mobile.png 的尺寸）
         bg = add_size_watermark(bg, original_width, original_height)
 
-        # 保存并优化文件大小（统一压缩到200-300KB）
         output_file = output_dir / 'mobile-combined.jpg'
         save_final_puzzle_image(bg, output_file)
 
@@ -378,20 +362,14 @@ def create_mobile_puzzle_2(work_dir: Path, output_dir: Path, main_color: Optiona
         # 计算两张图片（带阴影）的总宽度和间距
         total_content_width = mobile_lock.width + mobile_desktop_2.width + SPACING
 
-        # 如果总宽度超过画布，需要按比例缩小，但保持图片内容高度占70%的比例
-        # 计算缩放比例，确保两张图片内容宽度之和 + 间距不超过画布
-        max_total_width = canvas_width
+        # 左右各留 5% 边距，两张图片 + 间距不超过 80% 画布宽度
+        max_total_width = int(canvas_width * 0.80)
         if total_content_width > max_total_width:
-            # 计算需要缩小的比例
-            # 目标：2 * target_content_width * scale + SPACING <= max_total_width
-            # 所以：scale <= (max_total_width - SPACING) / (2 * target_content_width)
             max_scale = (max_total_width - SPACING) / (2 * target_content_width)
             if max_scale < 1.0:
-                # 需要缩小（保持高度占70%的比例）
                 new_target_content_width = int(target_content_width * max_scale)
                 new_target_content_height = int(target_content_height * max_scale)
 
-                # 重新调整图片尺寸
                 mobile_lock = Image.open(mobile_lock_file)
                 mobile_desktop_2 = Image.open(mobile_desktop_2_file)
                 mobile_lock = resize_to_fit_ratio(mobile_lock, target_input_ratio, (2000, 4000))
@@ -399,7 +377,6 @@ def create_mobile_puzzle_2(work_dir: Path, output_dir: Path, main_color: Optiona
                 mobile_lock = mobile_lock.resize((new_target_content_width, new_target_content_height), Image.Resampling.LANCZOS)
                 mobile_desktop_2 = mobile_desktop_2.resize((new_target_content_width, new_target_content_height), Image.Resampling.LANCZOS)
 
-                # 重新添加阴影和圆角
                 mobile_lock = add_shadow_and_rounded_corners(mobile_lock)
                 mobile_desktop_2 = add_shadow_and_rounded_corners(mobile_desktop_2)
                 total_content_width = mobile_lock.width + mobile_desktop_2.width + SPACING
@@ -565,20 +542,14 @@ def create_mobile_puzzle_3(work_dir: Path, output_dir: Path, main_color: Optiona
         # 计算两张图片（带阴影）的总宽度和间距
         total_content_width = mobile_lock.width + mobile_desktop_3.width + SPACING
 
-        # 如果总宽度超过画布，需要按比例缩小，但保持图片内容高度占70%的比例
-        # 计算缩放比例，确保两张图片内容宽度之和 + 间距不超过画布
-        max_total_width = canvas_width
+        # 左右各留 5% 边距，两张图片 + 间距不超过 90% 画布宽度
+        max_total_width = int(canvas_width * 0.90)
         if total_content_width > max_total_width:
-            # 计算需要缩小的比例
-            # 目标：2 * target_content_width * scale + SPACING <= max_total_width
-            # 所以：scale <= (max_total_width - SPACING) / (2 * target_content_width)
             max_scale = (max_total_width - SPACING) / (2 * target_content_width)
             if max_scale < 1.0:
-                # 需要缩小（保持高度占70%的比例）
                 new_target_content_width = int(target_content_width * max_scale)
                 new_target_content_height = int(target_content_height * max_scale)
 
-                # 重新调整图片尺寸
                 mobile_lock = Image.open(mobile_lock_file)
                 mobile_desktop_3 = Image.open(mobile_desktop_3_file)
                 mobile_lock = resize_to_fit_ratio(mobile_lock, target_input_ratio, (2000, 4000))
@@ -586,7 +557,6 @@ def create_mobile_puzzle_3(work_dir: Path, output_dir: Path, main_color: Optiona
                 mobile_lock = mobile_lock.resize((new_target_content_width, new_target_content_height), Image.Resampling.LANCZOS)
                 mobile_desktop_3 = mobile_desktop_3.resize((new_target_content_width, new_target_content_height), Image.Resampling.LANCZOS)
 
-                # 重新添加阴影和圆角
                 mobile_lock = add_shadow_and_rounded_corners(mobile_lock)
                 mobile_desktop_3 = add_shadow_and_rounded_corners(mobile_desktop_3)
                 total_content_width = mobile_lock.width + mobile_desktop_3.width + SPACING
@@ -729,8 +699,10 @@ def create_horizontal_pair_puzzle(
 
         total_content_width = img_a.width + img_b.width + SPACING
 
-        if total_content_width > canvas_width:
-            max_scale = (canvas_width - SPACING) / (2 * target_content_width)
+        # 左右各留 5% 边距，两张图片 + 间距不超过 80% 画布宽度
+        max_total_width = int(canvas_width * 0.80)
+        if total_content_width > max_total_width:
+            max_scale = (max_total_width - SPACING) / (2 * target_content_width)
             if max_scale < 1.0:
                 new_w = int(target_content_width * max_scale)
                 new_h = int(target_content_height * max_scale)
