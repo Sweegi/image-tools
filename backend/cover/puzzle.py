@@ -17,8 +17,6 @@ try:
         prepare_mobile_desktop, create_mobile_puzzle,
         prepare_mobile_desktop_2, create_mobile_puzzle_2,
         prepare_mobile_desktop_3, create_mobile_puzzle_3,
-        prepare_desktop_from_file, prepare_desktop_2_from_file,
-        create_horizontal_pair_puzzle
     )
     from .pad_puzzle import prepare_pad_images, create_pad_puzzle
     from .pc_puzzle import prepare_pc_desktop_mac, create_pc_puzzle
@@ -29,8 +27,6 @@ except ImportError:
         prepare_mobile_desktop, create_mobile_puzzle,
         prepare_mobile_desktop_2, create_mobile_puzzle_2,
         prepare_mobile_desktop_3, create_mobile_puzzle_3,
-        prepare_desktop_from_file, prepare_desktop_2_from_file,
-        create_horizontal_pair_puzzle
     )
     from pad_puzzle import prepare_pad_images, create_pad_puzzle
     from pc_puzzle import prepare_pc_desktop_mac, create_pc_puzzle
@@ -112,100 +108,75 @@ def process_subfolder(source_dir: Path, result_dir: Path, main_color: Optional[s
     return success
 
 
-def process_image_pairs(project_dir: Path, result_dir: Path, main_color: Optional[str] = None) -> bool:
+def process_plain_images(source_dir: Path, result_dir: Path) -> bool:
     """
-    处理 project_dir 中直接存放的成对图片文件（{name}.* + {name}-lock.*）。
-
-    对每对图片执行：
-      1. {name}-lock.* → phone_screen_replace → result_dir/{name}-cover.png
-      2. {name}.* + mobile-block-cover.png → overlay → result_dir/{name}-desktop.png
-      3. {name}-lock.* + {name}-desktop.png → 横向拼图 → result_dir/{name}-combined.jpg
-      4. {name}.* → 磨玻璃 + overlay → result_dir/{name}-desktop-2.png
-      5. {name}-lock.* + {name}-desktop-2.png → 横向拼图 → result_dir/{name}-combined-2.jpg
+    处理 source_dir 下直接存放的图片文件（1.png、2.png 等），
+    以 back.png 为底图，将每张图片缩放后居中贴合，结果输出到 result_dir。
+    处理逻辑与 mobile-imgs 目录相同：添加阴影圆角、尺寸水印，保存为压缩 JPG。
 
     Args:
-        project_dir: 项目目录（直接含图片文件）
+        source_dir: 源图片目录
         result_dir: 结果输出目录
-        main_color: 背景主色调
 
     Returns:
-        是否成功（没有找到成对图片时也返回 True）
+        是否成功（未找到图片时返回 True）
     """
+    if not BACK_IMAGE.exists():
+        logger.error(f"  缺少底图: {BACK_IMAGE}")
+        return False
+
     image_extensions = ['.png', '.jpg', '.jpeg', '.webp']
-
-    # 找出所有 {base}-lock.* 文件，key 为 base 名称
-    lock_files: dict[str, Path] = {}
+    image_files = []
     for ext in image_extensions:
-        for f in project_dir.glob(f'*-lock{ext}'):
-            stem = f.stem  # e.g. "1-lock"
-            if stem.endswith('-lock'):
-                base = stem[:-5]  # e.g. "1"
-                if base and base not in lock_files:
-                    lock_files[base] = f
+        image_files.extend(source_dir.glob(f'*{ext}'))
+        image_files.extend(source_dir.glob(f'*{ext.upper()}'))
 
-    if not lock_files:
+    if not image_files:
         return True
 
-    # 筛选出能找到对应 {base}.* 源图的配对
-    pairs = []
-    for base, lock_file in sorted(lock_files.items()):
-        source_file = get_image_file(project_dir, base)
-        if source_file:
-            pairs.append((base, lock_file, source_file))
-
-    if not pairs:
-        return True
-
-    logger.info(f"  找到 {len(pairs)} 对成对图片: {[p[0] for p in pairs]}")
     result_dir.mkdir(parents=True, exist_ok=True)
-    success = True
 
-    for base, lock_file, source_file in pairs:
-        logger.info(f"  处理图片对: {base}")
+    try:
+        back_img = Image.open(BACK_IMAGE)
+        if back_img.mode != 'RGB':
+            back_img = back_img.convert('RGB')
+        back_w, back_h = back_img.size
+    except Exception as e:
+        logger.error(f"  打开底图失败: {e}")
+        return False
 
-        # 1. {name}-lock.* → phone mockup → {name}-cover.png
-        cover_output = result_dir / f"{base}-cover.png"
-        if not cover_output.exists():
-            if PHONE_TEMPLATE.exists():
-                try:
-                    replace_screen(str(PHONE_TEMPLATE), str(lock_file), str(cover_output))
-                except Exception as e:
-                    logger.error(f"    生成 {base}-cover.png 失败: {e}")
-                    success = False
-            else:
-                logger.warning(f"    缺少 phone_template.png，跳过 {base}-cover.png 生成")
+    max_w = int(back_w * 0.7)
+    max_h = int(back_h * 0.7)
+    success_count = 0
 
-        # 2. {name}.* → overlay with mobile-block-cover → {name}-desktop.png
-        desktop_output = result_dir / f"{base}-desktop.png"
-        if not prepare_desktop_from_file(source_file, desktop_output):
-            success = False
+    for img_file in sorted(image_files):
+        output_file = result_dir / img_file.name
+        if output_file.exists():
+            logger.info(f"  {img_file.name} 已存在，跳过")
+            success_count += 1
             continue
+        try:
+            img = Image.open(img_file)
+            orig_w, orig_h = img.size
 
-        # 3. {name}-lock.* + {name}-desktop.png → 横向拼图 → {name}-combined.jpg
-        combined_output = result_dir / f"{base}-combined.jpg"
-        if not create_horizontal_pair_puzzle(
-            lock_file, desktop_output, combined_output,
-            main_color=main_color,
-            watermark_source=source_file
-        ):
-            success = False
+            scale = min(max_w / orig_w, max_h / orig_h, 1.0)
+            if scale < 1.0:
+                img = img.resize((int(orig_w * scale), int(orig_h * scale)), Image.Resampling.LANCZOS)
 
-        # 4. {name}.* → 磨玻璃 + overlay → {name}-desktop-2.png
-        desktop_2_output = result_dir / f"{base}-desktop-2.png"
-        if not prepare_desktop_2_from_file(source_file, desktop_2_output):
-            success = False
-            continue
+            img = add_shadow_and_rounded_corners(img)
 
-        # 5. {name}-lock.* + {name}-desktop-2.png → 横向拼图 → {name}-combined-2.jpg
-        combined_2_output = result_dir / f"{base}-combined-2.jpg"
-        if not create_horizontal_pair_puzzle(
-            lock_file, desktop_2_output, combined_2_output,
-            main_color=main_color,
-            watermark_source=source_file
-        ):
-            success = False
+            result_img = back_img.copy()
+            result_img.paste(img, ((back_w - img.width) // 2, (back_h - img.height) // 2), img)
+            result_img = add_size_watermark(result_img, orig_w, orig_h)
 
-    return success
+            save_final_puzzle_image(result_img, output_file)
+            logger.info(f"  已处理: {img_file.name}")
+            success_count += 1
+        except Exception as e:
+            logger.error(f"  处理图片 {img_file.name} 失败: {e}")
+
+    logger.info(f"  处理完成: {success_count}/{len(image_files)} 张图片成功")
+    return success_count > 0
 
 
 def process_project(project_dir: Path, main_color: Optional[str] = None) -> bool:
@@ -234,11 +205,12 @@ def process_project(project_dir: Path, main_color: Optional[str] = None) -> bool
 
     image_extensions = ['.png', '.jpg', '.jpeg', '.webp']
     subfolders = sorted([d for d in project_dir.iterdir() if d.is_dir()])
-    has_lock_pairs = any(
-        any(project_dir.glob(f'*-lock{ext}')) for ext in image_extensions
-    )
+    plain_images = [
+        f for ext in image_extensions
+        for f in list(project_dir.glob(f'*{ext}')) + list(project_dir.glob(f'*{ext.upper()}'))
+    ]
 
-    if not subfolders and not has_lock_pairs:
+    if not subfolders and not plain_images:
         logger.warning(f"项目 {project_dir.name} 下没有可处理的内容，跳过")
         return False
 
@@ -257,9 +229,9 @@ def process_project(project_dir: Path, main_color: Optional[str] = None) -> bool
                 logger.error(f"  处理子目录 {subfolder.name} 失败: {e}")
                 success = False
 
-    # 2. 处理直接存放的成对图片文件（{name}.* + {name}-lock.*）
-    if has_lock_pairs:
-        if not process_image_pairs(project_dir, result_dir, main_color):
+    # 2. 处理直接存放的图片文件（1.png、2.png 等），居中拼到 back.png 上
+    if plain_images:
+        if not process_plain_images(project_dir, result_dir):
             success = False
 
     if success:
