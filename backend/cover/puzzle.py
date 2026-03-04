@@ -17,7 +17,8 @@ try:
         prepare_mobile_desktop, create_mobile_puzzle,
         prepare_mobile_desktop_2, create_mobile_puzzle_2,
         prepare_mobile_desktop_3, create_mobile_puzzle_3,
-        prepare_desktop_from_file, create_horizontal_pair_puzzle
+        prepare_desktop_from_file, prepare_desktop_2_from_file,
+        create_horizontal_pair_puzzle
     )
     from .pad_puzzle import prepare_pad_images, create_pad_puzzle
     from .pc_puzzle import prepare_pc_desktop_mac, create_pc_puzzle
@@ -28,7 +29,8 @@ except ImportError:
         prepare_mobile_desktop, create_mobile_puzzle,
         prepare_mobile_desktop_2, create_mobile_puzzle_2,
         prepare_mobile_desktop_3, create_mobile_puzzle_3,
-        prepare_desktop_from_file, create_horizontal_pair_puzzle
+        prepare_desktop_from_file, prepare_desktop_2_from_file,
+        create_horizontal_pair_puzzle
     )
     from pad_puzzle import prepare_pad_images, create_pad_puzzle
     from pc_puzzle import prepare_pc_desktop_mac, create_pc_puzzle
@@ -118,6 +120,8 @@ def process_image_pairs(project_dir: Path, result_dir: Path, main_color: Optiona
       1. {name}-lock.* → phone_screen_replace → result_dir/{name}-cover.png
       2. {name}.* + mobile-block-cover.png → overlay → result_dir/{name}-desktop.png
       3. {name}-lock.* + {name}-desktop.png → 横向拼图 → result_dir/{name}-combined.jpg
+      4. {name}.* → 磨玻璃 + overlay → result_dir/{name}-desktop-2.png
+      5. {name}-lock.* + {name}-desktop-2.png → 横向拼图 → result_dir/{name}-combined-2.jpg
 
     Args:
         project_dir: 项目目录（直接含图片文件）
@@ -181,6 +185,21 @@ def process_image_pairs(project_dir: Path, result_dir: Path, main_color: Optiona
         combined_output = result_dir / f"{base}-combined.jpg"
         if not create_horizontal_pair_puzzle(
             lock_file, desktop_output, combined_output,
+            main_color=main_color,
+            watermark_source=source_file
+        ):
+            success = False
+
+        # 4. {name}.* → 磨玻璃 + overlay → {name}-desktop-2.png
+        desktop_2_output = result_dir / f"{base}-desktop-2.png"
+        if not prepare_desktop_2_from_file(source_file, desktop_2_output):
+            success = False
+            continue
+
+        # 5. {name}-lock.* + {name}-desktop-2.png → 横向拼图 → {name}-combined-2.jpg
+        combined_2_output = result_dir / f"{base}-combined-2.jpg"
+        if not create_horizontal_pair_puzzle(
+            lock_file, desktop_2_output, combined_2_output,
             main_color=main_color,
             watermark_source=source_file
         ):

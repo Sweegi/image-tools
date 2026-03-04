@@ -654,6 +654,66 @@ def prepare_desktop_from_file(
         return False
 
 
+def prepare_desktop_2_from_file(
+    source_file: Path,
+    output_file: Path,
+    cover_file: Path = None,
+    target_ratio: float = 9 / 19,
+    blur_radius: int = 140
+) -> bool:
+    """
+    通用：将 source 图片做磨玻璃模糊后与 cover 图叠加，生成 desktop-2 图片。
+    复用 prepare_desktop_from_file 的叠加逻辑，在叠加前对底图做高斯模糊。
+
+    Args:
+        source_file: 底图文件路径（如 1.png）
+        output_file: 输出文件路径（如 1-desktop-2.png）
+        cover_file: 覆盖图路径，默认使用 mobile-block-cover.png
+        target_ratio: 目标宽高比，默认 9:19
+        blur_radius: 高斯模糊半径，默认 140
+
+    Returns:
+        是否成功
+    """
+    if cover_file is None:
+        cover_file = MOBILE_BLOCK_COVER
+
+    if output_file.exists():
+        logger.info(f"  {output_file.name} 已存在，跳过")
+        return True
+
+    if not cover_file.exists():
+        logger.error(f"  缺少覆盖图片: {cover_file}")
+        return False
+
+    try:
+        base_img = Image.open(source_file)
+        cover_img = Image.open(cover_file)
+
+        base_ratio = base_img.width / base_img.height
+        if abs(base_ratio - target_ratio) > 0.01:
+            base_img = crop_to_ratio_center_height(base_img, target_ratio)
+
+        cover_ratio = cover_img.width / cover_img.height
+        if abs(cover_ratio - target_ratio) > 0.01:
+            new_height = cover_img.height
+            new_width = int(new_height * target_ratio)
+            cover_img = cover_img.resize((new_width, new_height), Image.Resampling.LANCZOS)
+
+        if base_img.size != cover_img.size:
+            cover_img = cover_img.resize(base_img.size, Image.Resampling.LANCZOS)
+
+        base_img = base_img.filter(ImageFilter.GaussianBlur(radius=blur_radius))
+        result = overlay_images(base_img, cover_img)
+        output_file.parent.mkdir(parents=True, exist_ok=True)
+        result.save(str(output_file), 'PNG')
+        logger.info(f"  已生成 {output_file.name}")
+        return True
+    except Exception as e:
+        logger.error(f"  生成 {output_file.name} 失败: {e}")
+        return False
+
+
 def create_horizontal_pair_puzzle(
     file_a: Path,
     file_b: Path,
